@@ -1,0 +1,16 @@
+{
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": true
+    }
+  },
+  "go.lintOnSave": "package",
+  "go.lintTool": "golangci-lint",
+  "go.toolsManagement.autoUpdate": true,
+  "gopls": {
+    "gofumpt": true,
+    "ui.semanticTokens": true
+  }
+}

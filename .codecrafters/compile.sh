@@ -8,4 +8,4 @@
 
 set -e # Exit on failure
 
-go build -o /tmp/codecrafters-build-shell-go cmd/my_shell/*.go
+go build -o /tmp/codecrafters-build-shell-go ./cmd/my_shell

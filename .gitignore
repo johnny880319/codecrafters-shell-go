@@ -1,0 +1,11 @@
+# Build output
+bin/
+
+# Local lint/test caches
+.cache/
+
+# Coverage artifacts
+coverage.out
+
+# Editor/OS noise
+.DS_Store
