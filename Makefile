@@ -69,7 +69,7 @@ run:
 ci: fmt-check vet lint test-race build
 
 pre-commit:
-	@pre-commit run --all-files
+	@PRE_COMMIT_HOME="$(CACHE_DIR)/pre-commit" pre-commit run --all-files
 
 clean:
 	@rm -rf bin $(CACHE_DIR)

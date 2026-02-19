@@ -14,7 +14,7 @@ This repository is configured with strict quality checks to keep changes safe an
 ## First-Time Setup
 
 ```bash
-pre-commit install
+PRE_COMMIT_HOME=$PWD/.cache/pre-commit pre-commit install --install-hooks
 make help
 ```
 
@@ -26,6 +26,7 @@ make help
    - `make test`
 3. Run full checks before push:
    - `make ci`
+   - `make pre-commit`
 
 ## Commit Message Style
 
