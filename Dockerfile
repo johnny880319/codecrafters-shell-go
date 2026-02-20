@@ -11,7 +11,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/my_shell ./cmd/my_shell
 
 # Runtime stage: keep a small image, but still include basic shell tools from Alpine.
-FROM alpine:3.21 AS runtime
+FROM alpine:3.23 AS runtime
 RUN apk --no-cache add ca-certificates && adduser -D -g '' appuser
 WORKDIR /app
 
