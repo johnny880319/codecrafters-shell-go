@@ -4,10 +4,14 @@ Thanks for contributing to `codecrafters-shell-go`.
 
 This repository is configured with strict quality checks to keep changes safe and easy to review.
 
+Configuration note:
+- The current toolchain/config is AI-suggested.
+- The repository owner is actively learning and may refine these settings over time.
+
 ## Prerequisites
 
 - Go 1.25.x
-- `golangci-lint` (same major version used in CI)
+- `golangci-lint` v2.x (pinned in `.golangci-version`, used by CI)
 - `pre-commit` (recommended)
 - Docker or Podman (optional, for container checks)
 

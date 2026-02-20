@@ -8,6 +8,10 @@ This repository is intentionally set up with strict quality gates, reproducible 
 
 Contribution workflow and PR checklist: see `CONTRIBUTING.md`.
 
+Configuration note:
+- This tooling stack is an AI-suggested baseline.
+- The repository owner is still learning these tools, so configuration may be adjusted over time as understanding improves.
+
 ## 1) Project structure
 
 ```text
@@ -16,6 +20,7 @@ Contribution workflow and PR checklist: see `CONTRIBUTING.md`.
 ├── internal/shell/repl.go      # Core shell logic (private to this module)
 ├── internal/shell/repl_test.go # Unit tests for shell logic
 ├── .golangci.yaml              # Strict lint config
+├── .golangci-version           # Single source of truth for golangci-lint version
 ├── .pre-commit-config.yaml     # Fast local quality gates
 ├── .github/workflows/go.yml    # CI checks on push/PR
 ├── Dockerfile                  # Multi-stage container build
@@ -33,6 +38,7 @@ Linting is handled by `golangci-lint` with an explicit strict set in `.golangci.
 - correctness: `govet`, `staticcheck`, `errcheck`, `errorlint`, `ineffassign`, `unused`
 - security: `gosec`
 - maintainability/style: `revive`, `gocritic`, `gocognit`, `lll`, `misspell`, `nolintlint`
+- toolchain baseline: `golangci-lint v2.x`
 
 Why explicit list instead of `enable-all`:
 - `enable-all` often breaks when new/deprecated linters are added in future releases.
