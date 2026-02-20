@@ -29,6 +29,7 @@ func RunOnce(in io.Reader, out io.Writer, errOut io.Writer) error {
 	}
 
 	command := scanner.Text()
+	//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
 	if _, err := fmt.Fprintf(out, "%s: command not found\n", command); err != nil {
 		return fmt.Errorf("write command output: %w", err)
 	}

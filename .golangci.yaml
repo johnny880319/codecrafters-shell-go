@@ -1,10 +1,12 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
   modules-download-mode: readonly
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - asciicheck
     - bidichk
@@ -17,7 +19,6 @@ linters:
     - gocheckcompilerdirectives
     - gocognit
     - gocritic
-    - gofmt
     - gosec
     - govet
     - ineffassign
@@ -37,43 +38,48 @@ linters:
     - wastedassign
     - whitespace
 
-linters-settings:
-  dupl:
-    threshold: 150
-  exhaustive:
-    default-signifies-exhaustive: true
-  gocognit:
-    min-complexity: 20
-  lll:
-    line-length: 120
-  nakedret:
-    max-func-lines: 20
-  revive:
+  settings:
+    dupl:
+      threshold: 150
+    exhaustive:
+      default-signifies-exhaustive: true
+    gocognit:
+      min-complexity: 20
+    lll:
+      line-length: 120
+    nakedret:
+      max-func-lines: 20
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: early-return
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+
+  exclusions:
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: early-return
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: range
-      - name: receiver-naming
-      - name: redefines-builtin-id
-      - name: superfluous-else
-      - name: time-naming
-      - name: unexported-return
+      - path: _test\.go
+        linters:
+          - dupl
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
 
 issues:
-  exclude-use-default: false
   max-same-issues: 0
   max-issues-per-linter: 0
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - dupl
-        - gosec
