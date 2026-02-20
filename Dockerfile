@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build stage: compile a static Go binary.
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
