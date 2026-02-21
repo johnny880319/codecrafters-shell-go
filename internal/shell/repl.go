@@ -2,19 +2,31 @@ package shell
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 )
 
 const prompt = "$ "
 
-// RunOnce reads a single command from in, executes it, and writes the output to out.
-func RunOnce(in io.Reader, out io.Writer) error {
+// Repl starts a read-eval-print loop that reads commands from in, executes them, and writes output to out.
+func Repl(in io.Reader, out io.Writer) error {
+	scanner := bufio.NewScanner(in)
+	for {
+		if err := runOnce(scanner, out); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+func runOnce(scanner *bufio.Scanner, out io.Writer) error {
 	if _, err := fmt.Fprint(out, prompt); err != nil {
 		return fmt.Errorf("write prompt: %w", err)
 	}
 
-	scanner := bufio.NewScanner(in)
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
 			return fmt.Errorf("read command: %w", err)

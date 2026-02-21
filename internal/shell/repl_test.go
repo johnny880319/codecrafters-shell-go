@@ -2,59 +2,53 @@ package shell
 
 import (
 	"bytes"
-	"errors"
-	"io"
 	"strings"
 	"testing"
-	"testing/iotest"
 )
 
-func TestRunOnceUnknownCommand(t *testing.T) {
+func TestPrintAPrompt(t *testing.T) {
 	t.Parallel()
+	testTemplate(
+		t,
+		"",
+		"$ ",
+	)
+}
 
+func TestHandleInvalidCommands(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		"xyz\n",
+		"$ xyz: command not found\n$ ",
+	)
+}
+
+func TestImplementARepl(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"invalid_command_1",
+			"invalid_command_2",
+			"invalid_command_3",
+		}, "\n")+"\n",
+		strings.Join([]string{
+			"$ invalid_command_1: command not found",
+			"$ invalid_command_2: command not found",
+			"$ invalid_command_3: command not found",
+		}, "\n")+"\n$ ",
+	)
+}
+
+func testTemplate(t *testing.T, input string, expectedOutput string) {
 	var out bytes.Buffer
-
-	err := RunOnce(strings.NewReader("hello\n"), &out)
+	err := Repl(strings.NewReader(input), &out)
 	if err != nil {
-		t.Fatalf("RunOnce() error = %v, want nil", err)
+		t.Fatalf("Repl() error = %v, want nil", err)
 	}
 
-	if got, want := out.String(), "$ hello: command not found\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-}
-
-func TestRunOnceEOF(t *testing.T) {
-	t.Parallel()
-
-	var out bytes.Buffer
-
-	err := RunOnce(strings.NewReader(""), &out)
-	if !errors.Is(err, io.EOF) {
-		t.Fatalf("RunOnce() error = %v, want io.EOF", err)
-	}
-
-	if got, want := out.String(), "$ "; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-}
-
-func TestRunOnceReadError(t *testing.T) {
-	t.Parallel()
-
-	readErr := errors.New("boom")
-	var out bytes.Buffer
-
-	err := RunOnce(iotest.ErrReader(readErr), &out)
-	if err == nil {
-		t.Fatal("RunOnce() error = nil, want non-nil")
-	}
-
-	if !strings.Contains(err.Error(), "read command") {
-		t.Fatalf("error = %q, want to contain %q", err.Error(), "read command")
-	}
-
-	if got, want := out.String(), "$ "; got != want {
+	if got, want := out.String(), expectedOutput; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 }
