@@ -79,6 +79,39 @@ func TestImplementEcho(t *testing.T) {
 	)
 }
 
+func TestImplementType(t *testing.T) {
+	t.Parallel()
+	// $ type echo
+	// echo is a shell builtin
+	// $ type exit
+	// exit is a shell builtin
+	// $ type type
+	// type is a shell builtin
+	// $ type invalid_command
+	// invalid_command: not found
+	// $
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"type echo\n",
+			"type exit\n",
+			"type type\n",
+			"type invalid_command\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"echo is a shell builtin\n",
+			"$ ",
+			"exit is a shell builtin\n",
+			"$ ",
+			"type is a shell builtin\n",
+			"$ ",
+			"invalid_command: not found\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string) {
 	var out bytes.Buffer
 	err := Repl(strings.NewReader(input), &out)
