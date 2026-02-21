@@ -61,6 +61,24 @@ func TestImplementExit(t *testing.T) {
 	)
 }
 
+func TestImplementEcho(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo hello world\n",
+			"echo pineapple strawberry\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"hello world\n",
+			"$ ",
+			"pineapple strawberry\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string) {
 	var out bytes.Buffer
 	err := Repl(strings.NewReader(input), &out)
