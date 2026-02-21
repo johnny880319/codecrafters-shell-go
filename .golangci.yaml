@@ -68,6 +68,7 @@ linters:
         - name: superfluous-else
         - name: time-naming
         - name: unexported-return
+        - name: unused-parameter
 
   exclusions:
     rules:
