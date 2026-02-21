@@ -35,10 +35,17 @@ func runOnce(scanner *bufio.Scanner, out io.Writer) error {
 	}
 
 	command := scanner.Text()
+	if command == "exit" {
+		exit()
+		return io.EOF
+	}
 	//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
 	if _, err := fmt.Fprintf(out, "%s: command not found\n", command); err != nil {
 		return fmt.Errorf("write command output: %w", err)
 	}
 
 	return nil
+}
+
+func exit() {
 }

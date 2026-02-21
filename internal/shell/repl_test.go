@@ -29,15 +29,35 @@ func TestImplementARepl(t *testing.T) {
 	testTemplate(
 		t,
 		strings.Join([]string{
-			"invalid_command_1",
-			"invalid_command_2",
-			"invalid_command_3",
-		}, "\n")+"\n",
+			"invalid_command_1\n",
+			"invalid_command_2\n",
+			"invalid_command_3\n",
+		}, ""),
 		strings.Join([]string{
-			"$ invalid_command_1: command not found",
-			"$ invalid_command_2: command not found",
-			"$ invalid_command_3: command not found",
-		}, "\n")+"\n$ ",
+			"$ ",
+			"invalid_command_1: command not found\n",
+			"$ ",
+			"invalid_command_2: command not found\n",
+			"$ ",
+			"invalid_command_3: command not found\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestImplementExit(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"invalid_command_1\n",
+			"exit\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"invalid_command_1: command not found\n",
+			"$ ",
+		}, ""),
 	)
 }
 
