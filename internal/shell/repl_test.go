@@ -2,6 +2,7 @@ package shell
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -12,6 +13,7 @@ func TestPrintAPrompt(t *testing.T) {
 		t,
 		"",
 		"$ ",
+		os.Getenv("PATH"),
 	)
 }
 
@@ -21,6 +23,7 @@ func TestHandleInvalidCommands(t *testing.T) {
 		t,
 		"xyz\n",
 		"$ xyz: command not found\n$ ",
+		os.Getenv("PATH"),
 	)
 }
 
@@ -42,6 +45,7 @@ func TestImplementARepl(t *testing.T) {
 			"invalid_command_3: command not found\n",
 			"$ ",
 		}, ""),
+		os.Getenv("PATH"),
 	)
 }
 
@@ -58,6 +62,7 @@ func TestImplementExit(t *testing.T) {
 			"invalid_command_1: command not found\n",
 			"$ ",
 		}, ""),
+		os.Getenv("PATH"),
 	)
 }
 
@@ -76,20 +81,12 @@ func TestImplementEcho(t *testing.T) {
 			"pineapple strawberry\n",
 			"$ ",
 		}, ""),
+		os.Getenv("PATH"),
 	)
 }
 
 func TestImplementType(t *testing.T) {
 	t.Parallel()
-	// $ type echo
-	// echo is a shell builtin
-	// $ type exit
-	// exit is a shell builtin
-	// $ type type
-	// type is a shell builtin
-	// $ type invalid_command
-	// invalid_command: not found
-	// $
 	testTemplate(
 		t,
 		strings.Join([]string{
@@ -109,12 +106,32 @@ func TestImplementType(t *testing.T) {
 			"invalid_command: not found\n",
 			"$ ",
 		}, ""),
+		os.Getenv("PATH"),
 	)
 }
 
-func testTemplate(t *testing.T, input string, expectedOutput string) {
+func TestLocateExecutableFiles(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"type ls\n",
+			"type invalid_command\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"ls is /usr/bin/ls\n",
+			"$ ",
+			"invalid_command: not found\n",
+			"$ ",
+		}, ""),
+		"/usr/bin:/usr/local/bin:"+os.Getenv("PATH"),
+	)
+}
+
+func testTemplate(t *testing.T, input string, expectedOutput string, sysPath string) {
 	var out bytes.Buffer
-	err := Repl(strings.NewReader(input), &out)
+	err := Repl(strings.NewReader(input), &out, sysPath)
 	if err != nil {
 		t.Fatalf("Repl() error = %v, want nil", err)
 	}

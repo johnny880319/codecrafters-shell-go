@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	err := shell.Repl(os.Stdin, os.Stdout)
+	err := shell.Repl(os.Stdin, os.Stdout, os.Getenv("PATH"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "shell error: %v\n", err)
 		os.Exit(1)
