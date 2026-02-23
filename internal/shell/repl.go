@@ -172,14 +172,17 @@ func (s *Shell) cmdCd(args []string) error {
 
 	newDir := args[0]
 	if filepath.IsAbs(newDir) {
-		if info, err := os.Stat(newDir); os.IsNotExist(err) {
+		info, err := os.Stat(newDir)
+		if os.IsNotExist(err) {
 			_, printfErr := fmt.Fprintf(s.out, "cd: %s: No such file or directory\n", newDir)
 			return printfErr
-		} else if !info.IsDir() {
+		}
+		if err != nil {
+			return fmt.Errorf("check directory: %w", err)
+		}
+		if !info.IsDir() {
 			_, printfErr := fmt.Fprintf(s.out, "cd: %s: Not a directory\n", newDir)
 			return printfErr
-		} else if err != nil {
-			return fmt.Errorf("check directory: %w", err)
 		}
 
 		s.workingDir = newDir
