@@ -57,6 +57,7 @@ func NewShell(out io.Writer, opts ...Option) *Shell {
 		"echo": s.cmdEcho,
 		"type": s.cmdType,
 		"pwd":  s.cmdPwd,
+		"cd":   s.cmdCd,
 	}
 
 	return s
@@ -157,6 +158,33 @@ func (s *Shell) cmdPwd(_ []string) error {
 	//nolint:gosec // Printing working directory is the intended behavior of a shell
 	_, err := fmt.Fprintln(s.out, s.workingDir)
 	return err
+}
+
+func (s *Shell) cmdCd(args []string) error {
+	if len(args) == 0 {
+		s.workingDir = os.Getenv("HOME")
+		return nil
+	}
+	if len(args) > 1 {
+		_, err := fmt.Fprintln(s.out, "cd: too many arguments")
+		return err
+	}
+
+	newDir := args[0]
+	if filepath.IsAbs(newDir) {
+		if info, err := os.Stat(newDir); os.IsNotExist(err) {
+			_, printfErr := fmt.Fprintf(s.out, "cd: %s: No such file or directory\n", newDir)
+			return printfErr
+		} else if !info.IsDir() {
+			_, printfErr := fmt.Fprintf(s.out, "cd: %s: Not a directory\n", newDir)
+			return printfErr
+		} else if err != nil {
+			return fmt.Errorf("check directory: %w", err)
+		}
+
+		s.workingDir = newDir
+	}
+	return nil
 }
 
 func (s *Shell) findExecutable(command string) (string, bool) {

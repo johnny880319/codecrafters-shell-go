@@ -153,6 +153,26 @@ func TestThePwdBuiltin(t *testing.T) {
 	)
 }
 
+func TestTheCdBuiltinAbsolutePaths(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"cd /usr/local/bin\n",
+			"pwd\n",
+			"cd /does_not_exist\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+			"/usr/local/bin\n",
+			"$ ",
+			"cd: /does_not_exist: No such file or directory\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
 	myShell := NewShell(&out, opts...)
