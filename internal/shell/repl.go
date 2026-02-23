@@ -56,6 +56,8 @@ func runOnce(scanner *bufio.Scanner, out io.Writer, sysPath string) error {
 	if path, found := findExecutable(command, sysPath); found {
 		//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
 		cmd := exec.CommandContext(context.Background(), path, args...)
+		// Ensure argv[0] is the command name as typed by the user
+		cmd.Args[0] = command
 		cmd.Stdout = out
 		cmd.Stderr = out
 		_ = cmd.Run()
