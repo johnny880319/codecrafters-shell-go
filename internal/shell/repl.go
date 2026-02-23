@@ -70,7 +70,7 @@ func (s *Shell) Repl(in io.Reader) error {
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			return err
+			return fmt.Errorf("shell session ended with error: %w", err)
 		}
 	}
 }
@@ -99,18 +99,16 @@ func (s *Shell) runOnce(scanner *bufio.Scanner) error {
 	}
 
 	if path, found := s.findExecutable(command); found {
-		//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
+		//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
 		cmd := exec.CommandContext(context.Background(), path, args...)
-		// Ensure argv[0] is the command name as typed by the user
 		cmd.Args[0] = command
-		// Set the working directory for the command to the shell's current working directory
 		cmd.Dir = s.workingDir
 		cmd.Stdout = s.out
 		cmd.Stderr = s.out
 		_ = cmd.Run()
 		return nil
 	}
-	//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
+	//nolint:gosec // Printing dynamic user input is the intended behavior of a shell
 	if _, err := fmt.Fprintf(s.out, "%s: command not found\n", input); err != nil {
 		return fmt.Errorf("write command output: %w", err)
 	}
@@ -131,10 +129,8 @@ func (s *Shell) cmdExit(_ []string) error {
 }
 
 func (s *Shell) cmdEcho(args []string) error {
-	if _, err := fmt.Fprintln(s.out, strings.Join(args, " ")); err != nil {
-		return err
-	}
-	return nil
+	_, err := fmt.Fprintln(s.out, strings.Join(args, " "))
+	return err
 }
 
 func (s *Shell) cmdType(args []string) error {
@@ -144,7 +140,7 @@ func (s *Shell) cmdType(args []string) error {
 				return err
 			}
 		} else if path, found := s.findExecutable(arg); found {
-			//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
+			//nolint:gosec // Printing dynamic user input is the intended behavior of a shell
 			if _, err := fmt.Fprintf(s.out, "%s is %s\n", arg, path); err != nil {
 				return err
 			}
@@ -158,7 +154,7 @@ func (s *Shell) cmdType(args []string) error {
 }
 
 func (s *Shell) cmdPwd(_ []string) error {
-	//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
+	//nolint:gosec // Printing working directory is the intended behavior of a shell
 	_, err := fmt.Fprintln(s.out, s.workingDir)
 	return err
 }

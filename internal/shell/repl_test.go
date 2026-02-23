@@ -146,9 +146,10 @@ func TestThePwdBuiltin(t *testing.T) {
 		"pwd\n",
 		strings.Join([]string{
 			"$ ",
-			os.Getenv("PWD") + "\n",
+			"/usr/local/bin\n",
 			"$ ",
 		}, ""),
+		WithWorkingDir("/usr/local/bin"),
 	)
 }
 
