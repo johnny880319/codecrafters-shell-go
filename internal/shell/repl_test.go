@@ -116,16 +116,33 @@ func TestLocateExecutableFiles(t *testing.T) {
 		t,
 		strings.Join([]string{
 			"type ls\n",
+			"type basename\n",
 			"type invalid_command\n",
 		}, ""),
 		strings.Join([]string{
 			"$ ",
 			"ls is /usr/bin/ls\n",
 			"$ ",
+			"basename is /usr/bin/basename\n",
+			"$ ",
 			"invalid_command: not found\n",
 			"$ ",
 		}, ""),
 		"/usr/bin:/usr/local/bin:"+os.Getenv("PATH"),
+	)
+}
+
+func TestRunAProgram(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		"basename /hello/world/golang\n",
+		strings.Join([]string{
+			"$ ",
+			"golang\n",
+			"$ ",
+		}, ""),
+		os.Getenv("PATH"),
 	)
 }
 

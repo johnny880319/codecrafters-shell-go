@@ -2,6 +2,7 @@ package shell
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -51,6 +52,14 @@ func runOnce(scanner *bufio.Scanner, out io.Writer, sysPath string) error {
 	command, args := parseCommand(input)
 	if commandFunc, ok := commandFuncMap[command]; ok {
 		return commandFunc(args, out, sysPath)
+	}
+	if path, found := findExecutable(command, sysPath); found {
+		//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
+		cmd := exec.CommandContext(context.Background(), path, args...)
+		cmd.Stdout = out
+		cmd.Stderr = out
+		_ = cmd.Run()
+		return nil
 	}
 	//nolint:gosec // This is plain terminal output, not HTML/JS rendering.
 	if _, err := fmt.Fprintf(out, "%s: command not found\n", input); err != nil {
