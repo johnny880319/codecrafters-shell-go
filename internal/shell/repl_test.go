@@ -13,7 +13,6 @@ func TestPrintAPrompt(t *testing.T) {
 		t,
 		"",
 		"$ ",
-		os.Getenv("PATH"),
 	)
 }
 
@@ -23,7 +22,6 @@ func TestHandleInvalidCommands(t *testing.T) {
 		t,
 		"xyz\n",
 		"$ xyz: command not found\n$ ",
-		os.Getenv("PATH"),
 	)
 }
 
@@ -45,7 +43,6 @@ func TestImplementARepl(t *testing.T) {
 			"invalid_command_3: command not found\n",
 			"$ ",
 		}, ""),
-		os.Getenv("PATH"),
 	)
 }
 
@@ -62,7 +59,6 @@ func TestImplementExit(t *testing.T) {
 			"invalid_command_1: command not found\n",
 			"$ ",
 		}, ""),
-		os.Getenv("PATH"),
 	)
 }
 
@@ -81,7 +77,6 @@ func TestImplementEcho(t *testing.T) {
 			"pineapple strawberry\n",
 			"$ ",
 		}, ""),
-		os.Getenv("PATH"),
 	)
 }
 
@@ -106,7 +101,6 @@ func TestImplementType(t *testing.T) {
 			"invalid_command: not found\n",
 			"$ ",
 		}, ""),
-		os.Getenv("PATH"),
 	)
 }
 
@@ -128,7 +122,7 @@ func TestLocateExecutableFiles(t *testing.T) {
 			"invalid_command: not found\n",
 			"$ ",
 		}, ""),
-		"/usr/bin:/usr/local/bin:"+os.Getenv("PATH"),
+		WithSysPath("/usr/bin:/usr/local/bin:"+os.Getenv("PATH")),
 	)
 }
 
@@ -142,13 +136,26 @@ func TestRunAProgram(t *testing.T) {
 			"golang\n",
 			"$ ",
 		}, ""),
-		os.Getenv("PATH"),
 	)
 }
 
-func testTemplate(t *testing.T, input string, expectedOutput string, sysPath string) {
+func TestThePwdBuiltin(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		"pwd\n",
+		strings.Join([]string{
+			"$ ",
+			os.Getenv("PWD") + "\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
-	err := Repl(strings.NewReader(input), &out, sysPath)
+	myShell := NewShell(&out, opts...)
+	err := myShell.Repl(strings.NewReader(input))
 	if err != nil {
 		t.Fatalf("Repl() error = %v, want nil", err)
 	}
