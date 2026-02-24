@@ -175,6 +175,10 @@ func (s *Shell) cmdCd(args []string) error {
 		return s.checkDirectory(newPath)
 	}
 
+	if strings.HasPrefix(newPath, "~") {
+		s.workingDir = os.Getenv("HOME")
+		newPath = newPath[1:]
+	}
 	absPath := filepath.Join(s.workingDir, newPath)
 	return s.checkDirectory(absPath)
 }

@@ -200,6 +200,28 @@ func TestTheCdBuiltinRelativePaths(t *testing.T) {
 	)
 }
 
+func TestTheCdBuiltinHomeDirectory(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"cd /usr/local/bin\n",
+			"pwd\n",
+			"cd ~\n",
+			"pwd\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+			"/usr/local/bin\n",
+			"$ ",
+			"$ ",
+			os.Getenv("HOME") + "\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
 	myShell := NewShell(&out, opts...)
