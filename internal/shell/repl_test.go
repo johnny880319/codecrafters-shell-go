@@ -286,12 +286,15 @@ func TestBackslashWithinSingleQuotes(t *testing.T) {
 		strings.Join([]string{
 			"echo 'multiple\\\\slashes'\n",
 			"echo 'every\\\"thing_is\\\"literal'\n",
+			"echo /tmp/dog/'no slash 25' /tmp/dog/'one slash \\23' /tmp/dog/'two slashes \\6\\'\n",
 		}, ""),
 		strings.Join([]string{
 			"$ ",
 			"multiple\\\\slashes\n",
 			"$ ",
 			"every\\\"thing_is\\\"literal\n",
+			"$ ",
+			"/tmp/dog/no slash 25 /tmp/dog/one slash \\23 /tmp/dog/two slashes \\6\\\n",
 			"$ ",
 		}, ""),
 	)
