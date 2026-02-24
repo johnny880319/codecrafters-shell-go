@@ -15,7 +15,8 @@ const prompt = "$ "
 
 // Shell represents the core state of the interactive shell.
 type Shell struct {
-	out            io.Writer
+	stdOut         io.Writer
+	stdErr         io.Writer
 	sysPath        string
 	workingDir     string
 	commandFuncMap map[string]func(args []string) error
@@ -42,7 +43,8 @@ func NewShell(out io.Writer, opts ...Option) *Shell {
 	}
 
 	s := &Shell{
-		out:        out,
+		stdOut:     out,
+		stdErr:     out,
 		sysPath:    os.Getenv("PATH"),
 		workingDir: wd,
 	}
@@ -76,7 +78,7 @@ func (s *Shell) Repl(in io.Reader) error {
 }
 
 func (s *Shell) runOnce(scanner *bufio.Scanner) error {
-	if _, err := fmt.Fprint(s.out, prompt); err != nil {
+	if _, err := fmt.Fprint(s.stdOut, prompt); err != nil {
 		return fmt.Errorf("write prompt: %w", err)
 	}
 
@@ -94,6 +96,24 @@ func (s *Shell) runOnce(scanner *bufio.Scanner) error {
 		return nil
 	}
 
+	originalStdOut := s.stdOut
+	originalStdErr := s.stdErr
+	defer func() {
+		s.stdOut = originalStdOut
+		s.stdErr = originalStdErr
+	}()
+
+	args, toBeClosed, err := s.handleRedirect(args)
+	if err != nil {
+		_, _ = fmt.Fprintln(s.stdErr, err)
+		return nil
+	}
+	if toBeClosed != nil {
+		defer func() {
+			_ = toBeClosed.Close()
+		}()
+	}
+
 	if commandFunc, ok := s.commandFuncMap[command]; ok {
 		return commandFunc(args)
 	}
@@ -103,13 +123,13 @@ func (s *Shell) runOnce(scanner *bufio.Scanner) error {
 		cmd := exec.CommandContext(context.Background(), path, args...)
 		cmd.Args[0] = command
 		cmd.Dir = s.workingDir
-		cmd.Stdout = s.out
-		cmd.Stderr = s.out
+		cmd.Stdout = s.stdOut
+		cmd.Stderr = s.stdErr
 		_ = cmd.Run()
 		return nil
 	}
 	//nolint:gosec // Printing dynamic user input is the intended behavior of a shell
-	if _, err := fmt.Fprintf(s.out, "%s: command not found\n", input); err != nil {
+	if _, err := fmt.Fprintf(s.stdOut, "%s: command not found\n", input); err != nil {
 		return fmt.Errorf("write command output: %w", err)
 	}
 
@@ -125,4 +145,30 @@ func (s *Shell) findExecutable(command string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func (s *Shell) handleRedirect(args []string) ([]string, *os.File, error) {
+	for i, arg := range args {
+		if (arg == ">" || arg == "1>") && i < len(args)-1 {
+			filename := args[i+1]
+			//nolint:gosec // Opening files based on user input is the intended behavior of a shell
+			file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: %s", filename, err.Error())
+			}
+			s.stdOut = file
+			return append(args[:i], args[i+2:]...), file, nil
+		}
+		if arg == "2>" && i < len(args)-1 {
+			filename := args[i+1]
+			//nolint:gosec // Opening files based on user input is the intended behavior of a shell
+			file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: %s", filename, err.Error())
+			}
+			s.stdErr = file
+			return append(args[:i], args[i+2:]...), file, nil
+		}
+	}
+	return args, nil, nil
 }
