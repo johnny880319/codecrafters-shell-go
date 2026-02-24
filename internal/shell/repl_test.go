@@ -222,6 +222,24 @@ func TestTheCdBuiltinHomeDirectory(t *testing.T) {
 	)
 }
 
+func TestSingleQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo 'shell hello'\n",
+			"echo 'world     test'\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"shell hello\n",
+			"$ ",
+			"world     test\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
 	myShell := NewShell(&out, opts...)

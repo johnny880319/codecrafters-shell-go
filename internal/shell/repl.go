@@ -118,7 +118,28 @@ func (s *Shell) runOnce(scanner *bufio.Scanner) error {
 }
 
 func parseCommand(input string) (command string, args []string) {
-	fields := strings.Fields(input)
+	fields := []string{}
+	inSingleQuotes := false
+	curField := ""
+	for _, r := range input {
+		if r == '\'' {
+			inSingleQuotes = !inSingleQuotes
+			continue
+		}
+		if r == ' ' && !inSingleQuotes {
+			if curField != "" {
+				fields = append(fields, curField)
+				curField = ""
+			}
+			continue
+		}
+		curField += string(r)
+	}
+
+	if curField != "" {
+		fields = append(fields, curField)
+	}
+
 	if len(fields) == 0 {
 		return "", nil
 	}
