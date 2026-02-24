@@ -258,6 +258,27 @@ func TestDoubleQuotes(t *testing.T) {
 	)
 }
 
+func TestBackslashOutsideQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo multiple\\ \\ \\ \\ spaces\n",
+			"echo \\'\\\"literal quotes\\\"\\'\n",
+			"echo ignore\\_backslash\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"multiple    spaces\n",
+			"$ ",
+			"'\"literal quotes\"'\n",
+			"$ ",
+			"ignore_backslash\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
 	myShell := NewShell(&out, opts...)

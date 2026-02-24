@@ -119,10 +119,20 @@ func (s *Shell) runOnce(scanner *bufio.Scanner) error {
 
 func parseCommand(input string) (command string, args []string) {
 	fields := []string{}
+	escaped := false
 	inSingleQuotes := false
 	inDoubleQuotes := false
 	curField := ""
 	for _, r := range input {
+		if escaped {
+			curField += string(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' && !inSingleQuotes && !inDoubleQuotes {
+			escaped = true
+			continue
+		}
 		if r == '\'' && !inDoubleQuotes {
 			inSingleQuotes = !inSingleQuotes
 			continue
