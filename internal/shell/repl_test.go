@@ -279,6 +279,42 @@ func TestBackslashOutsideQuotes(t *testing.T) {
 	)
 }
 
+func TestBackslashWithinSingleQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo 'multiple\\\\slashes'\n",
+			"echo 'every\\\"thing_is\\\"literal'\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"multiple\\\\slashes\n",
+			"$ ",
+			"every\\\"thing_is\\\"literal\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestBackslashWithinDoubleQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo \"just'one'\\\\n'backslash\"\n",
+			"echo \"inside\\\"literal_quote.\"outside\"\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"just'one'\\n'backslash\n",
+			"$ ",
+			"inside\"literal_quote.outside\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
 	myShell := NewShell(&out, opts...)
