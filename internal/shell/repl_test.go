@@ -173,6 +173,33 @@ func TestTheCdBuiltinAbsolutePaths(t *testing.T) {
 	)
 }
 
+func TestTheCdBuiltinRelativePaths(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"cd /usr\n",
+			"pwd\n",
+			"cd ./local/bin\n",
+			"pwd\n",
+			"cd ../../\n",
+			"pwd\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+			"/usr\n",
+			"$ ",
+			"$ ",
+			"/usr/local/bin\n",
+			"$ ",
+			"$ ",
+			"/usr\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
 	myShell := NewShell(&out, opts...)
