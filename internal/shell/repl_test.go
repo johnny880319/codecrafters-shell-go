@@ -240,6 +240,24 @@ func TestSingleQuotes(t *testing.T) {
 	)
 }
 
+func TestDoubleQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo \"quz  hello\"  \"bar\"\n",
+			"echo \"bar\"  \"shell's\"  \"foo\"\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"quz  hello bar\n",
+			"$ ",
+			"bar shell's foo\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
 	myShell := NewShell(&out, opts...)
