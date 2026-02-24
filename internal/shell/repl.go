@@ -170,7 +170,7 @@ func (s *Shell) handleRedirect(args []string) ([]string, *os.File, error) {
 			s.stdErr = file
 			return append(args[:i], args[i+2:]...), file, nil
 		}
-		if arg == ">>" && i < len(args)-1 {
+		if (arg == ">>" || arg == "1>>") && i < len(args)-1 {
 			filename := args[i+1]
 			//nolint:gosec // Opening files based on user input is the intended behavior of a shell
 			file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
