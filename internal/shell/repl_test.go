@@ -2,59 +2,235 @@ package shell
 
 import (
 	"bytes"
-	"errors"
-	"io"
+	"os"
 	"strings"
 	"testing"
-	"testing/iotest"
 )
 
-func TestRunOnceUnknownCommand(t *testing.T) {
+func TestPrintAPrompt(t *testing.T) {
 	t.Parallel()
+	testTemplate(
+		t,
+		"",
+		"$ ",
+	)
+}
 
+func TestHandleInvalidCommands(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		"xyz\n",
+		"$ xyz: command not found\n$ ",
+	)
+}
+
+func TestImplementARepl(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"invalid_command_1\n",
+			"invalid_command_2\n",
+			"invalid_command_3\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"invalid_command_1: command not found\n",
+			"$ ",
+			"invalid_command_2: command not found\n",
+			"$ ",
+			"invalid_command_3: command not found\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestImplementExit(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"invalid_command_1\n",
+			"exit\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"invalid_command_1: command not found\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestImplementEcho(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo hello world\n",
+			"echo pineapple strawberry\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"hello world\n",
+			"$ ",
+			"pineapple strawberry\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestImplementType(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"type echo\n",
+			"type exit\n",
+			"type type\n",
+			"type invalid_command\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"echo is a shell builtin\n",
+			"$ ",
+			"exit is a shell builtin\n",
+			"$ ",
+			"type is a shell builtin\n",
+			"$ ",
+			"invalid_command: not found\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestLocateExecutableFiles(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"type ls\n",
+			"type basename\n",
+			"type invalid_command\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"ls is /usr/bin/ls\n",
+			"$ ",
+			"basename is /usr/bin/basename\n",
+			"$ ",
+			"invalid_command: not found\n",
+			"$ ",
+		}, ""),
+		WithSysPath("/usr/bin:/usr/local/bin:"+os.Getenv("PATH")),
+	)
+}
+
+func TestRunAProgram(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		"basename /hello/world/golang\n",
+		strings.Join([]string{
+			"$ ",
+			"golang\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestThePwdBuiltin(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		"pwd\n",
+		strings.Join([]string{
+			"$ ",
+			"/usr/local/bin\n",
+			"$ ",
+		}, ""),
+		WithWorkingDir("/usr/local/bin"),
+	)
+}
+
+func TestTheCdBuiltinAbsolutePaths(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"cd /usr/local/bin\n",
+			"pwd\n",
+			"cd /does_not_exist\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+			"/usr/local/bin\n",
+			"$ ",
+			"cd: /does_not_exist: No such file or directory\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestTheCdBuiltinRelativePaths(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"cd /usr\n",
+			"pwd\n",
+			"cd ./local/bin\n",
+			"pwd\n",
+			"cd ../../\n",
+			"pwd\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+			"/usr\n",
+			"$ ",
+			"$ ",
+			"/usr/local/bin\n",
+			"$ ",
+			"$ ",
+			"/usr\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestTheCdBuiltinHomeDirectory(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"cd /usr/local/bin\n",
+			"pwd\n",
+			"cd ~\n",
+			"pwd\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+			"/usr/local/bin\n",
+			"$ ",
+			"$ ",
+			os.Getenv("HOME") + "\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
-
-	err := RunOnce(strings.NewReader("hello\n"), &out)
+	myShell := NewShell(&out, opts...)
+	err := myShell.Repl(strings.NewReader(input))
 	if err != nil {
-		t.Fatalf("RunOnce() error = %v, want nil", err)
+		t.Fatalf("Repl() error = %v, want nil", err)
 	}
 
-	if got, want := out.String(), "$ hello: command not found\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-}
-
-func TestRunOnceEOF(t *testing.T) {
-	t.Parallel()
-
-	var out bytes.Buffer
-
-	err := RunOnce(strings.NewReader(""), &out)
-	if !errors.Is(err, io.EOF) {
-		t.Fatalf("RunOnce() error = %v, want io.EOF", err)
-	}
-
-	if got, want := out.String(), "$ "; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-}
-
-func TestRunOnceReadError(t *testing.T) {
-	t.Parallel()
-
-	readErr := errors.New("boom")
-	var out bytes.Buffer
-
-	err := RunOnce(iotest.ErrReader(readErr), &out)
-	if err == nil {
-		t.Fatal("RunOnce() error = nil, want non-nil")
-	}
-
-	if !strings.Contains(err.Error(), "read command") {
-		t.Fatalf("error = %q, want to contain %q", err.Error(), "read command")
-	}
-
-	if got, want := out.String(), "$ "; got != want {
+	if got, want := out.String(), expectedOutput; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 }
