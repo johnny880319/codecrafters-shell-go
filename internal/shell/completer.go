@@ -49,6 +49,9 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	slices.SortFunc(matches, slices.Compare)
+	if _, err := fmt.Fprintln(c.shell.stdOut); err != nil {
+		return nil, len(lineStr)
+	}
 	for _, match := range matches {
 		if _, err := fmt.Fprint(c.shell.stdOut, string(match)+"  "); err != nil {
 			return nil, len(lineStr)
