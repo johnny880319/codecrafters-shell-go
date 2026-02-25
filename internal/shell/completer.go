@@ -22,13 +22,13 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	for builtin := range c.shell.commandFuncMap {
 		if strings.HasPrefix(builtin, lineStr) {
-			completion := builtin[len(lineStr):] + " "
+			completion := builtin[len(lineStr):]
 			matches = append(matches, []rune(completion))
 		}
 	}
 
 	for _, cmd := range c.findPrefixExecutables(lineStr) {
-		completion := cmd[len(lineStr):] + " "
+		completion := cmd[len(lineStr):]
 		matches = append(matches, []rune(completion))
 	}
 
@@ -47,6 +47,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	c.tabCount = 0
 
 	if len(matches) == 1 {
+		matches[0] = append(matches[0], ' ')
 		return matches, len(lineStr)
 	}
 
@@ -63,6 +64,10 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 				return nil, len(lineStr)
 			}
 		}
+	}
+
+	if _, err := fmt.Fprint(c.shell.stdOut, "\n"+string(line[:pos])); err != nil {
+		return nil, len(lineStr)
 	}
 
 	return nil, len(lineStr)
