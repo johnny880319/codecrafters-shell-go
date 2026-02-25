@@ -114,6 +114,7 @@ func (s *Shell) Repl() error {
 	}
 }
 
+//nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	pipelineStr := strings.Split(input, "|")
 
@@ -172,18 +173,27 @@ func (s *Shell) execute(input string) error {
 
 	for _, cmd := range cmds {
 		_ = cmd.Start()
-	}
 
-	for _, pw := range pipeClosers {
-		_ = pw.Close()
-	}
+		for i := 0; i < len(cmds)-1; i++ {
+			cmd := cmds[i]
+			pw := pipeClosers[i]
 
-	for _, cmd := range cmds {
-		_ = cmd.Wait()
-	}
+			go func(c *exec.Cmd, p io.Closer) {
+				_ = c.Wait()
+				_ = p.Close()
+			}(cmd, pw)
+		}
 
-	for _, c := range redirectClosers {
-		_ = c.Close()
+		if len(cmds) > 0 {
+			lastCmd := cmds[len(cmds)-1]
+			_ = lastCmd.Wait()
+		}
+
+		for _, c := range redirectClosers {
+			if c != nil {
+				_ = c.Close()
+			}
+		}
 	}
 
 	return nil
