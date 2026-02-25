@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -43,6 +44,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	c.tabCount = 0
 
+	slices.SortFunc(matches, slices.Compare)
 	return matches, len(lineStr)
 }
 
