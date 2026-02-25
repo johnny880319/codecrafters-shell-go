@@ -68,17 +68,17 @@ func (s *Shell) findExecutable(command string) (string, bool) {
 	return "", false
 }
 
-func (s *Shell) handleRedirect(args []string) ([]string, *os.File, error) {
+func handleRedirect(args []string, currStdout *io.Writer, currStderr *io.Writer) ([]string, *os.File, error) {
 	redirect_map := map[string]struct {
 		flag   int
 		writer *io.Writer
 	}{
-		">":   {os.O_TRUNC, &s.stdOut},
-		"1>":  {os.O_TRUNC, &s.stdOut},
-		"2>":  {os.O_TRUNC, &s.stdErr},
-		">>":  {os.O_APPEND, &s.stdOut},
-		"1>>": {os.O_APPEND, &s.stdOut},
-		"2>>": {os.O_APPEND, &s.stdErr},
+		">":   {os.O_TRUNC, currStdout},
+		"1>":  {os.O_TRUNC, currStdout},
+		"2>":  {os.O_TRUNC, currStderr},
+		">>":  {os.O_APPEND, currStdout},
+		"1>>": {os.O_APPEND, currStdout},
+		"2>>": {os.O_APPEND, currStderr},
 	}
 	for i, arg := range args {
 		if redirect, ok := redirect_map[arg]; ok && i < len(args)-1 {

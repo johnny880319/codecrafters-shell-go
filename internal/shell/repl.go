@@ -127,7 +127,7 @@ func (s *Shell) execute(input string) error {
 		s.stdErr = originalStdErr
 	}()
 
-	args, toBeClosed, err := s.handleRedirect(args)
+	args, toBeClosed, err := handleRedirect(args, &s.stdOut, &s.stdErr)
 	if err != nil {
 		_, _ = fmt.Fprintln(s.stdErr, err)
 		return nil
