@@ -14,28 +14,11 @@ type customCompleter struct {
 }
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
-//
-//nolint:gocognit // Will be refactored in a future exercise --- IGNORE ---
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	lineStr := string(line[:pos])
-	var matchesStrings []string
 	var matches [][]rune
 
-	for builtin := range c.shell.commandFuncMap {
-		if strings.HasPrefix(builtin, lineStr) {
-			completion := builtin[len(lineStr):]
-			matchesStrings = append(matchesStrings, completion)
-		}
-	}
-
-	for _, cmd := range c.findPrefixExecutables(lineStr) {
-		completion := cmd[len(lineStr):]
-		matchesStrings = append(matchesStrings, completion)
-	}
-
-	slices.Sort(matchesStrings)
-	matchesStrings = slices.Compact(matchesStrings)
-	for _, match := range matchesStrings {
+	for _, match := range c.getMatchStrings(lineStr) {
 		matches = append(matches, []rune(match))
 	}
 
@@ -58,7 +41,6 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		return matches, len(lineStr)
 	}
 
-	slices.SortFunc(matches, slices.Compare)
 	if _, err := fmt.Fprintln(c.shell.stdOut); err != nil {
 		return nil, len(lineStr)
 	}
@@ -78,6 +60,24 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	return nil, len(lineStr)
+}
+
+func (c *customCompleter) getMatchStrings(lineStr string) []string {
+	var matches []string
+	for builtin := range c.shell.commandFuncMap {
+		if strings.HasPrefix(builtin, lineStr) {
+			completion := builtin[len(lineStr):]
+			matches = append(matches, completion)
+		}
+	}
+
+	for _, cmd := range c.findPrefixExecutables(lineStr) {
+		completion := cmd[len(lineStr):]
+		matches = append(matches, completion)
+	}
+
+	slices.Sort(matches)
+	return slices.Compact(matches)
 }
 
 func (c *customCompleter) findPrefixExecutables(prefix string) []string {
