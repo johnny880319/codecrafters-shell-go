@@ -76,13 +76,20 @@ func (s *Shell) Repl() error {
 		readline.PcItem("echo"),
 	)
 
+	var rlStdin io.ReadCloser
+	if rc, ok := s.stdIn.(io.ReadCloser); ok {
+		rlStdin = rc
+	} else {
+		rlStdin = io.NopCloser(s.stdIn)
+	}
+
 	readlineInitMutex.Lock()
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          prompt,
 		AutoComplete:    completer,
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
-		Stdin:           io.NopCloser(s.stdIn),
+		Stdin:           rlStdin,
 		Stdout:          s.stdOut,
 		Stderr:          s.stdErr,
 	})
