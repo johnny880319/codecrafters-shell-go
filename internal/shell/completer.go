@@ -32,11 +32,8 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	if len(matches) == 1 {
 		c.tabCount = 0
-		if _, err := fmt.Fprint(c.shell.stdOut, string(line[:pos])+string(matches[0])+" "); err != nil {
-			return nil, len(lineStr)
-		}
 		matches[0] = append(matches[0], ' ')
-		return nil, len(lineStr)
+		return matches, len(lineStr)
 	}
 
 	if c.tabCount == 0 {
