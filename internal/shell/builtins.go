@@ -24,7 +24,6 @@ func (s *Shell) cmdType(args []string) error {
 				return err
 			}
 		} else if path, found := s.findExecutable(arg); found {
-			//nolint:gosec // Printing dynamic user input is the intended behavior of a shell
 			if _, err := fmt.Fprintf(s.stdOut, "%s is %s\n", arg, path); err != nil {
 				return err
 			}
@@ -38,7 +37,6 @@ func (s *Shell) cmdType(args []string) error {
 }
 
 func (s *Shell) cmdPwd(_ []string) error {
-	//nolint:gosec // Printing working directory is the intended behavior of a shell
 	_, err := fmt.Fprintln(s.stdOut, s.workingDir)
 	return err
 }

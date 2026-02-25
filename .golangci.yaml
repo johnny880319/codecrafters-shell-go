@@ -4,6 +4,8 @@ run:
   timeout: 5m
   tests: true
   modules-download-mode: readonly
+  skip-dirs:
+    - .cache
 
 linters:
   default: none

@@ -1,19 +1,24 @@
 package shell
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"sync"
+
+	"github.com/chzyer/readline"
 )
 
 const prompt = "$ "
 
+var readlineInitMutex sync.Mutex
+
 // Shell represents the core state of the interactive shell.
 type Shell struct {
+	stdIn          io.Reader
 	stdOut         io.Writer
 	stdErr         io.Writer
 	sysPath        string
@@ -35,13 +40,14 @@ func WithWorkingDir(d string) Option {
 }
 
 // NewShell creates a new Shell instance with default OS environment variables.
-func NewShell(out io.Writer, opts ...Option) *Shell {
+func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	wd, err := os.Getwd()
 	if err != nil {
 		wd = "/"
 	}
 
 	s := &Shell{
+		stdIn:      in,
 		stdOut:     out,
 		stdErr:     out,
 		sysPath:    os.Getenv("PATH"),
@@ -64,31 +70,55 @@ func NewShell(out io.Writer, opts ...Option) *Shell {
 }
 
 // Repl starts a read-eval-print loop that reads commands from in, executes them, and writes output to out.
-func (s *Shell) Repl(in io.Reader) error {
-	scanner := bufio.NewScanner(in)
+func (s *Shell) Repl() error {
+	completer := readline.NewPrefixCompleter(
+		readline.PcItem("exit"),
+		readline.PcItem("echo"),
+	)
+
+	readlineInitMutex.Lock()
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          "",
+		AutoComplete:    completer,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+		Stdin:           io.NopCloser(s.stdIn),
+		Stdout:          s.stdOut,
+		Stderr:          s.stdErr,
+	})
+	readlineInitMutex.Unlock()
+
+	if err != nil {
+		return fmt.Errorf("failed to initialize readline: %w", err)
+	}
+	defer func() {
+		_ = rl.Close()
+	}()
+
 	for {
-		if err := s.runOnce(scanner); err != nil {
+		if _, err := fmt.Fprint(s.stdOut, prompt); err != nil {
+			return fmt.Errorf("write prompt: %w", err)
+		}
+		input, err := rl.Readline()
+		if err != nil {
+			if errors.Is(err, readline.ErrInterrupt) {
+				continue
+			}
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			return fmt.Errorf("shell session ended with error: %w", err)
+			return fmt.Errorf("read line error: %w", err)
+		}
+
+		if err := s.execute(input); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 		}
 	}
 }
 
-func (s *Shell) runOnce(scanner *bufio.Scanner) error {
-	if _, err := fmt.Fprint(s.stdOut, prompt); err != nil {
-		return fmt.Errorf("write prompt: %w", err)
-	}
-
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return fmt.Errorf("read command: %w", err)
-		}
-		return io.EOF
-	}
-
-	input := scanner.Text()
+func (s *Shell) execute(input string) error {
 	command, args := parseCommand(input)
 
 	if command == "" {
@@ -127,7 +157,6 @@ func (s *Shell) runOnce(scanner *bufio.Scanner) error {
 		_ = cmd.Run()
 		return nil
 	}
-	//nolint:gosec // Printing dynamic user input is the intended behavior of a shell
 	if _, err := fmt.Fprintf(s.stdOut, "%s: command not found\n", input); err != nil {
 		return fmt.Errorf("write command output: %w", err)
 	}

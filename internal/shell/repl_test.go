@@ -320,8 +320,8 @@ func TestBackslashWithinDoubleQuotes(t *testing.T) {
 
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
-	myShell := NewShell(&out, opts...)
-	err := myShell.Repl(strings.NewReader(input))
+	myShell := NewShell(strings.NewReader(input), &out, opts...)
+	err := myShell.Repl()
 	if err != nil {
 		t.Fatalf("Repl() error = %v, want nil", err)
 	}
