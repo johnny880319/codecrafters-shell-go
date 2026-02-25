@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/chzyer/readline"
@@ -114,46 +115,75 @@ func (s *Shell) Repl() error {
 }
 
 func (s *Shell) execute(input string) error {
-	command, args := parseCommand(input)
+	pipelineStr := strings.Split(input, "|")
 
-	if command == "" {
-		return nil
+	var cmds []*exec.Cmd
+	var pipeClosers []io.Closer
+	var redirectClosers []*os.File
+
+	prevReader := s.stdIn
+	for i, cmdStr := range pipelineStr {
+		command, args := parseCommand(cmdStr)
+
+		if command == "" {
+			continue
+		}
+
+		cmdStdin := prevReader
+		cmdStdout := s.stdOut
+		cmdStderr := s.stdErr
+
+		if i < len(pipelineStr)-1 {
+			pr, pw := io.Pipe()
+			cmdStdout = pw
+			prevReader = pr
+			pipeClosers = append(pipeClosers, pw)
+		}
+
+		var err error
+		var closer *os.File
+		args, closer, err = handleRedirect(args, &cmdStdout, &cmdStderr)
+		if err != nil {
+			_, _ = fmt.Fprintln(s.stdErr, err)
+			continue
+		}
+		redirectClosers = append(redirectClosers, closer)
+
+		if _, ok := s.commandFuncMap[command]; ok {
+			continue
+		}
+
+		if path, found := s.findExecutable(command); found {
+			//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
+			cmd := exec.CommandContext(context.Background(), path, args...)
+			cmd.Args[0] = command
+			cmd.Dir = s.workingDir
+			cmd.Stdin = cmdStdin
+			cmd.Stdout = cmdStdout
+			cmd.Stderr = cmdStderr
+
+			cmds = append(cmds, cmd)
+		} else {
+			if _, err := fmt.Fprintf(s.stdOut, "%s: command not found\n", command); err != nil {
+				return fmt.Errorf("write command output: %w", err)
+			}
+		}
 	}
 
-	originalStdOut := s.stdOut
-	originalStdErr := s.stdErr
-	defer func() {
-		s.stdOut = originalStdOut
-		s.stdErr = originalStdErr
-	}()
-
-	args, toBeClosed, err := handleRedirect(args, &s.stdOut, &s.stdErr)
-	if err != nil {
-		_, _ = fmt.Fprintln(s.stdErr, err)
-		return nil
-	}
-	if toBeClosed != nil {
-		defer func() {
-			_ = toBeClosed.Close()
-		}()
+	for _, cmd := range cmds {
+		_ = cmd.Start()
 	}
 
-	if commandFunc, ok := s.commandFuncMap[command]; ok {
-		return commandFunc(args)
+	for _, pw := range pipeClosers {
+		_ = pw.Close()
 	}
 
-	if path, found := s.findExecutable(command); found {
-		//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
-		cmd := exec.CommandContext(context.Background(), path, args...)
-		cmd.Args[0] = command
-		cmd.Dir = s.workingDir
-		cmd.Stdout = s.stdOut
-		cmd.Stderr = s.stdErr
-		_ = cmd.Run()
-		return nil
+	for _, cmd := range cmds {
+		_ = cmd.Wait()
 	}
-	if _, err := fmt.Fprintf(s.stdOut, "%s: command not found\n", input); err != nil {
-		return fmt.Errorf("write command output: %w", err)
+
+	for _, c := range redirectClosers {
+		_ = c.Close()
 	}
 
 	return nil
