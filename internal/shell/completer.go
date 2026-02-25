@@ -14,6 +14,8 @@ type customCompleter struct {
 }
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
+//
+//nolint:gocognit // Will be refactored in a future exercise --- IGNORE ---
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	lineStr := string(line[:pos])
 	var matches [][]rune
@@ -52,9 +54,14 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	if _, err := fmt.Fprintln(c.shell.stdOut); err != nil {
 		return nil, len(lineStr)
 	}
-	for _, match := range matches {
-		if _, err := fmt.Fprint(c.shell.stdOut, string(line[:pos])+string(match)+"  "); err != nil {
+	for i, match := range matches {
+		if _, err := fmt.Fprint(c.shell.stdOut, string(line[:pos])+string(match)); err != nil {
 			return nil, len(lineStr)
+		}
+		if i < len(matches)-1 {
+			if _, err := fmt.Fprint(c.shell.stdOut, "  "); err != nil {
+				return nil, len(lineStr)
+			}
 		}
 	}
 
