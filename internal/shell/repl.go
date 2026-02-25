@@ -72,14 +72,10 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 
 // Repl starts a read-eval-print loop that reads commands from in, executes them, and writes output to out.
 func (s *Shell) Repl() error {
-	completer := &customCompleter{
-		shell: s,
-	}
-
 	readlineInitMutex.Lock()
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          prompt,
-		AutoComplete:    completer,
+		AutoComplete:    s,
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
 		Stdin:           io.NopCloser(s.stdIn),
@@ -164,16 +160,12 @@ func (s *Shell) execute(input string) error {
 	return nil
 }
 
-// customCompleter wraps the completion logic and rings the bell on s.stdOut when there are no matches
-type customCompleter struct {
-	shell *Shell
-}
-
-func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+// Do implements readline.AutoCompleter to provide tab completion for built-in commands.
+func (s *Shell) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	lineStr := string(line[:pos])
 	var matches [][]rune
 
-	for builtin := range c.shell.commandFuncMap {
+	for builtin := range s.commandFuncMap {
 		if strings.HasPrefix(builtin, lineStr) {
 			completion := builtin[len(lineStr):] + " "
 			matches = append(matches, []rune(completion))
@@ -181,7 +173,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	if len(matches) == 0 {
-		if _, err := fmt.Fprint(c.shell.stdOut, "\x07"); err != nil {
+		if _, err := fmt.Fprint(s.stdOut, "\x07"); err != nil {
 			return nil, len(lineStr)
 		}
 		return nil, len(lineStr)
