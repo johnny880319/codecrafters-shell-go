@@ -44,8 +44,18 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	c.tabCount = 0
 
+	if len(matches) == 1 {
+		return matches, len(lineStr)
+	}
+
 	slices.SortFunc(matches, slices.Compare)
-	return matches, len(lineStr)
+	for _, match := range matches {
+		if _, err := fmt.Fprint(c.shell.stdOut, string(match)+"  "); err != nil {
+			return nil, len(lineStr)
+		}
+	}
+
+	return nil, len(lineStr)
 }
 
 func (c *customCompleter) findPrefixExecutables(prefix string) []string {
