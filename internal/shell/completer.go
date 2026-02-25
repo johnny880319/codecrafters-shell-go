@@ -16,11 +16,7 @@ type customCompleter struct {
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	lineStr := string(line[:pos])
-	var matches [][]rune
-
-	for _, match := range c.getMatchStrings(lineStr) {
-		matches = append(matches, []rune(match))
-	}
+	matches := c.getMatchStrings(lineStr)
 
 	if len(matches) == 0 {
 		c.tabCount = 0
@@ -32,8 +28,12 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	if len(matches) == 1 {
 		c.tabCount = 0
-		matches[0] = append(matches[0], ' ')
-		return matches, len(lineStr)
+		return [][]rune{[]rune(matches[0] + " ")}, len(lineStr)
+	}
+
+	if longest := longestCommonPrefix(matches); longest != "" && longest != lineStr {
+		c.tabCount = 0
+		return [][]rune{[]rune(longest)}, len(lineStr)
 	}
 
 	if c.tabCount == 0 {
@@ -50,7 +50,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		return nil, len(lineStr)
 	}
 	for i, match := range matches {
-		if _, err := fmt.Fprint(c.shell.stdOut, string(line[:pos])+string(match)); err != nil {
+		if _, err := fmt.Fprint(c.shell.stdOut, string(line[:pos])+match); err != nil {
 			return nil, len(lineStr)
 		}
 		if i < len(matches)-1 {
@@ -65,6 +65,22 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	return nil, len(lineStr)
+}
+
+func longestCommonPrefix(strs []string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	prefix := strs[0]
+	for _, s := range strs[1:] {
+		for !strings.HasPrefix(s, prefix) {
+			prefix = prefix[:len(prefix)-1]
+			if prefix == "" {
+				return ""
+			}
+		}
+	}
+	return prefix
 }
 
 func (c *customCompleter) getMatchStrings(lineStr string) []string {
