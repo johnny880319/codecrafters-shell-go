@@ -78,7 +78,7 @@ func (s *Shell) Repl() error {
 
 	readlineInitMutex.Lock()
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          "",
+		Prompt:          prompt,
 		AutoComplete:    completer,
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
@@ -96,9 +96,9 @@ func (s *Shell) Repl() error {
 	}()
 
 	for {
-		if _, err := fmt.Fprint(s.stdOut, prompt); err != nil {
-			return fmt.Errorf("write prompt: %w", err)
-		}
+		// if _, err := fmt.Fprint(s.stdOut, prompt); err != nil {
+		// 	return fmt.Errorf("write prompt: %w", err)
+		// }
 		input, err := rl.Readline()
 		if err != nil {
 			if errors.Is(err, readline.ErrInterrupt) {
