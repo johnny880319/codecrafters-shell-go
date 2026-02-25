@@ -74,7 +74,7 @@ func (s *Shell) Repl() error {
 	readlineInitMutex.Lock()
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          prompt,
-		AutoComplete:    &customCompleter{shell: s},
+		AutoComplete:    &customCompleter{shell: s, tabCount: 0},
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
 		Stdin:           io.NopCloser(s.stdIn),

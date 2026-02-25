@@ -8,7 +8,8 @@ import (
 )
 
 type customCompleter struct {
-	shell *Shell
+	shell    *Shell
+	tabCount int
 }
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
@@ -28,12 +29,19 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		matches = append(matches, []rune(completion))
 	}
 
-	if len(matches) == 0 {
+	if len(matches) == 0 || (len(matches) > 1 && c.tabCount == 0) {
 		if _, err := fmt.Fprint(c.shell.stdOut, "\x07"); err != nil {
 			return nil, len(lineStr)
 		}
+		if len(matches) > 1 {
+			c.tabCount = 1
+		} else {
+			c.tabCount = 0
+		}
 		return nil, len(lineStr)
 	}
+
+	c.tabCount = 0
 
 	return matches, len(lineStr)
 }
