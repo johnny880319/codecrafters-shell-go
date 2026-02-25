@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/chzyer/readline"
@@ -71,10 +72,9 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 
 // Repl starts a read-eval-print loop that reads commands from in, executes them, and writes output to out.
 func (s *Shell) Repl() error {
-	completer := readline.NewPrefixCompleter(
-		readline.PcItem("exit"),
-		readline.PcItem("echo"),
-	)
+	completer := &customCompleter{
+		shell: s,
+	}
 
 	var rlStdin io.ReadCloser
 	if rc, ok := s.stdIn.(io.ReadCloser); ok {
@@ -103,9 +103,9 @@ func (s *Shell) Repl() error {
 	}()
 
 	for {
-		// if _, err := fmt.Fprint(s.stdOut, prompt); err != nil {
-		// 	return fmt.Errorf("write prompt: %w", err)
-		// }
+		if _, err := fmt.Fprint(s.stdOut, prompt); err != nil {
+			return fmt.Errorf("write prompt: %w", err)
+		}
 		input, err := rl.Readline()
 		if err != nil {
 			if errors.Is(err, readline.ErrInterrupt) {
@@ -169,4 +169,30 @@ func (s *Shell) execute(input string) error {
 	}
 
 	return nil
+}
+
+// customCompleter wraps the completion logic and rings the bell on s.stdOut when there are no matches
+type customCompleter struct {
+	shell *Shell
+}
+
+func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	lineStr := string(line[:pos])
+	var matches [][]rune
+
+	for builtin := range c.shell.commandFuncMap {
+		if strings.HasPrefix(builtin, lineStr) {
+			completion := builtin[len(lineStr):] + " "
+			matches = append(matches, []rune(completion))
+		}
+	}
+
+	if len(matches) == 0 {
+		if _, err := fmt.Fprint(c.shell.stdOut, "\x07"); err != nil {
+			return nil, len(lineStr)
+		}
+		return nil, len(lineStr)
+	}
+
+	return matches, len(lineStr)
 }
