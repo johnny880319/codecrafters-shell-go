@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 
 	"github.com/chzyer/readline"
@@ -158,30 +157,4 @@ func (s *Shell) execute(input string) error {
 	}
 
 	return nil
-}
-
-type customCompleter struct {
-	shell *Shell
-}
-
-// Do implements readline.AutoCompleter to provide tab completion for built-in commands.
-func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
-	lineStr := string(line[:pos])
-	var matches [][]rune
-
-	for builtin := range c.shell.commandFuncMap {
-		if strings.HasPrefix(builtin, lineStr) {
-			completion := builtin[len(lineStr):] + " "
-			matches = append(matches, []rune(completion))
-		}
-	}
-
-	if len(matches) == 0 {
-		if _, err := fmt.Fprint(c.shell.stdOut, "\x07"); err != nil {
-			return nil, len(lineStr)
-		}
-		return nil, len(lineStr)
-	}
-
-	return matches, len(lineStr)
 }
