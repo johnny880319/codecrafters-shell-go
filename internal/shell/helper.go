@@ -9,9 +9,9 @@ import (
 	"strings"
 )
 
-//nolint:gocognit // Will be refactored in a future exercise
 func parseCommand(input string) (command string, args []string) {
 	fields := []string{}
+	var str string
 	escaped := false
 	inSingleQuotes := false
 	inDoubleQuotes := false
@@ -24,30 +24,8 @@ func parseCommand(input string) (command string, args []string) {
 			}
 			continue
 		}
-		if escaped && (inDoubleQuotes && !strings.ContainsRune("\"\\$`\n", r)) {
-			curField += "\\"
-			curField += string(r)
-			escaped = false
-			continue
-		}
-		if escaped {
-			curField += string(r)
-			escaped = false
-			continue
-		}
-		if r == '\\' && !inSingleQuotes {
-			escaped = true
-			continue
-		}
-		if r == '\'' && !inDoubleQuotes {
-			inSingleQuotes = !inSingleQuotes
-			continue
-		}
-		if r == '"' && !inSingleQuotes {
-			inDoubleQuotes = !inDoubleQuotes
-			continue
-		}
-		curField += string(r)
+		str, escaped, inSingleQuotes, inDoubleQuotes = parseCharacter(r, escaped, inSingleQuotes, inDoubleQuotes)
+		curField += str
 	}
 
 	if curField != "" {
@@ -58,6 +36,25 @@ func parseCommand(input string) (command string, args []string) {
 		return "", nil
 	}
 	return fields[0], fields[1:]
+}
+
+func parseCharacter(r rune, escaped, inSingleQuotes, inDoubleQuotes bool) (string, bool, bool, bool) {
+	if escaped && (inDoubleQuotes && !strings.ContainsRune("\"\\$`\n", r)) {
+		return "\\" + string(r), false, inSingleQuotes, inDoubleQuotes
+	}
+	if escaped {
+		return string(r), false, inSingleQuotes, inDoubleQuotes
+	}
+	if r == '\\' && !inSingleQuotes {
+		return "", true, inSingleQuotes, inDoubleQuotes
+	}
+	if r == '\'' && !inDoubleQuotes {
+		return "", escaped, !inSingleQuotes, inDoubleQuotes
+	}
+	if r == '"' && !inSingleQuotes {
+		return "", escaped, inSingleQuotes, !inDoubleQuotes
+	}
+	return string(r), escaped, inSingleQuotes, inDoubleQuotes
 }
 
 func (s *Shell) findExecutable(command string) (string, bool) {
