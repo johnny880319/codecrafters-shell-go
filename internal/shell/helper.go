@@ -17,6 +17,13 @@ func parseCommand(input string) (command string, args []string) {
 	inDoubleQuotes := false
 	curField := ""
 	for _, r := range input {
+		if r == ' ' && !inSingleQuotes && !inDoubleQuotes && !escaped {
+			if curField != "" {
+				fields = append(fields, curField)
+				curField = ""
+			}
+			continue
+		}
 		if escaped && (inDoubleQuotes && !strings.ContainsRune("\"\\$`\n", r)) {
 			curField += "\\"
 			curField += string(r)
@@ -38,13 +45,6 @@ func parseCommand(input string) (command string, args []string) {
 		}
 		if r == '"' && !inSingleQuotes {
 			inDoubleQuotes = !inDoubleQuotes
-			continue
-		}
-		if r == ' ' && !inSingleQuotes && !inDoubleQuotes {
-			if curField != "" {
-				fields = append(fields, curField)
-				curField = ""
-			}
 			continue
 		}
 		curField += string(r)
