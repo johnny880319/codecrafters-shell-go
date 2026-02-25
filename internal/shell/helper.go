@@ -74,14 +74,14 @@ func (s *Shell) findExecutable(command string) (string, bool) {
 func (s *Shell) handleRedirect(args []string) ([]string, *os.File, error) {
 	redirect_map := map[string]struct {
 		flag   int
-		writer io.Writer
+		writer *io.Writer
 	}{
-		">":   {os.O_TRUNC, s.stdOut},
-		"1>":  {os.O_TRUNC, s.stdOut},
-		"2>":  {os.O_TRUNC, s.stdErr},
-		">>":  {os.O_APPEND, s.stdOut},
-		"1>>": {os.O_APPEND, s.stdOut},
-		"2>>": {os.O_APPEND, s.stdErr},
+		">":   {os.O_TRUNC, &s.stdOut},
+		"1>":  {os.O_TRUNC, &s.stdOut},
+		"2>":  {os.O_TRUNC, &s.stdErr},
+		">>":  {os.O_APPEND, &s.stdOut},
+		"1>>": {os.O_APPEND, &s.stdOut},
+		"2>>": {os.O_APPEND, &s.stdErr},
 	}
 	for i, arg := range args {
 		if redirect, ok := redirect_map[arg]; ok && i < len(args)-1 {
@@ -91,7 +91,7 @@ func (s *Shell) handleRedirect(args []string) ([]string, *os.File, error) {
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s: %s", filename, err.Error())
 			}
-			redirect.writer = file
+			*redirect.writer = file
 			return append(args[:i], args[i+2:]...), file, nil
 		}
 	}
