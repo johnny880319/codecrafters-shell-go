@@ -132,16 +132,16 @@ func (s *Shell) execute(input string) error {
 		s.stdErr = originalStdErr
 	}()
 
-	args, toBeClosed, err := s.handleRedirect(args)
-	if err != nil {
-		_, _ = fmt.Fprintln(s.stdErr, err)
-		return nil
-	}
-	if toBeClosed != nil {
-		defer func() {
-			_ = toBeClosed.Close()
-		}()
-	}
+	// args, toBeClosed, err := s.handleRedirect(args)
+	// if err != nil {
+	// 	_, _ = fmt.Fprintln(s.stdErr, err)
+	// 	return nil
+	// }
+	// if toBeClosed != nil {
+	// 	defer func() {
+	// 		_ = toBeClosed.Close()
+	// 	}()
+	// }
 
 	if commandFunc, ok := s.commandFuncMap[command]; ok {
 		return commandFunc(args)
