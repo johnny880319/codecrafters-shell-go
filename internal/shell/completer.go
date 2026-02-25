@@ -22,24 +22,29 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		matches = append(matches, []rune(match))
 	}
 
-	if len(matches) == 0 || (len(matches) > 1 && c.tabCount == 0) {
+	if len(matches) == 0 {
+		c.tabCount = 0
 		if _, err := fmt.Fprint(c.shell.stdOut, "\x07"); err != nil {
 			return nil, len(lineStr)
-		}
-		if len(matches) > 1 {
-			c.tabCount = 1
-		} else {
-			c.tabCount = 0
 		}
 		return nil, len(lineStr)
 	}
 
-	c.tabCount = 0
-
 	if len(matches) == 1 {
+		c.tabCount = 0
 		matches[0] = append(matches[0], ' ')
-		return matches, len(lineStr)
+		return nil, len(lineStr)
 	}
+
+	if c.tabCount == 0 {
+		if _, err := fmt.Fprint(c.shell.stdOut, "\x07"); err != nil {
+			return nil, len(lineStr)
+		}
+		c.tabCount = 1
+		return nil, len(lineStr)
+	}
+
+	c.tabCount = 0
 
 	if _, err := fmt.Fprintln(c.shell.stdOut); err != nil {
 		return nil, len(lineStr)
