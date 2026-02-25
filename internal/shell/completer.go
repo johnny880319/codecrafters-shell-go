@@ -53,7 +53,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		return nil, len(lineStr)
 	}
 	for _, match := range matches {
-		if _, err := fmt.Fprint(c.shell.stdOut, string(match)+"  "); err != nil {
+		if _, err := fmt.Fprint(c.shell.stdOut, string(line[:pos])+string(match)+"  "); err != nil {
 			return nil, len(lineStr)
 		}
 	}
