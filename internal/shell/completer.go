@@ -66,7 +66,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		}
 	}
 
-	if _, err := fmt.Fprint(c.shell.stdOut, "\n"+string(line[:pos])); err != nil {
+	if _, err := fmt.Fprint(c.shell.stdOut, "\n"+prompt+string(line[:pos])); err != nil {
 		return nil, len(lineStr)
 	}
 
