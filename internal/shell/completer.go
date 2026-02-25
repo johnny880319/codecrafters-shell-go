@@ -18,18 +18,25 @@ type customCompleter struct {
 //nolint:gocognit // Will be refactored in a future exercise --- IGNORE ---
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	lineStr := string(line[:pos])
+	var matchesStrings []string
 	var matches [][]rune
 
 	for builtin := range c.shell.commandFuncMap {
 		if strings.HasPrefix(builtin, lineStr) {
 			completion := builtin[len(lineStr):]
-			matches = append(matches, []rune(completion))
+			matchesStrings = append(matchesStrings, completion)
 		}
 	}
 
 	for _, cmd := range c.findPrefixExecutables(lineStr) {
 		completion := cmd[len(lineStr):]
-		matches = append(matches, []rune(completion))
+		matchesStrings = append(matchesStrings, completion)
+	}
+
+	slices.Sort(matchesStrings)
+	matchesStrings = slices.Compact(matchesStrings)
+	for _, match := range matchesStrings {
+		matches = append(matches, []rune(match))
 	}
 
 	if len(matches) == 0 || (len(matches) > 1 && c.tabCount == 0) {
