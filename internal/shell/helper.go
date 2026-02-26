@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func parseCommand(input string) (command string, args []string) {
+func handleQuotesAndEscapes(input string) []string {
 	fields := []string{}
 	var str string
 	escaped := false
@@ -32,11 +32,54 @@ func parseCommand(input string) (command string, args []string) {
 		fields = append(fields, curField)
 	}
 
-	if len(fields) == 0 {
-		return "", nil
-	}
-	return fields[0], fields[1:]
+	return fields
 }
+
+func splitPipeline(input []string) [][]string {
+	var pipeline [][]string
+	currentCommand := []string{}
+	for _, arg := range input {
+		if arg == "|" {
+			pipeline = append(pipeline, currentCommand)
+			currentCommand = []string{}
+		} else {
+			currentCommand = append(currentCommand, arg)
+		}
+	}
+	if len(currentCommand) > 0 {
+		pipeline = append(pipeline, currentCommand)
+	}
+	return pipeline
+}
+
+// func parseCommand(input string) (command string, args []string) {
+// 	fields := []string{}
+// 	var str string
+// 	escaped := false
+// 	inSingleQuotes := false
+// 	inDoubleQuotes := false
+// 	curField := ""
+// 	for _, r := range input {
+// 		if r == ' ' && !inSingleQuotes && !inDoubleQuotes && !escaped {
+// 			if curField != "" {
+// 				fields = append(fields, curField)
+// 				curField = ""
+// 			}
+// 			continue
+// 		}
+// 		str, escaped, inSingleQuotes, inDoubleQuotes = parseCharacter(r, escaped, inSingleQuotes, inDoubleQuotes)
+// 		curField += str
+// 	}
+
+// 	if curField != "" {
+// 		fields = append(fields, curField)
+// 	}
+
+// 	if len(fields) == 0 {
+// 		return "", nil
+// 	}
+// 	return fields[0], fields[1:]
+// }
 
 func parseCharacter(r rune, escaped, inSingleQuotes, inDoubleQuotes bool) (string, bool, bool, bool) {
 	if escaped && (inDoubleQuotes && !strings.ContainsRune("\"\\$`\n", r)) {

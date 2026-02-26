@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 
 	"github.com/chzyer/readline"
@@ -116,12 +115,13 @@ func (s *Shell) Repl() error {
 
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
-	pipelineStr := strings.Split(input, "|")
+	splitedInput := handleQuotesAndEscapes(input)
+	pipelineStr := splitPipeline(splitedInput)
 	var wg sync.WaitGroup
 
 	prevReader := s.stdin
 	for i, cmdStr := range pipelineStr {
-		command, args := parseCommand(cmdStr)
+		command, args := cmdStr[0], cmdStr[1:]
 
 		if command == "" {
 			continue
