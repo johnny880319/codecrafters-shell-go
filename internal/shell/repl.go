@@ -24,7 +24,7 @@ type Shell struct {
 	stdErr         io.Writer
 	sysPath        string
 	workingDir     string
-	commandFuncMap map[string]func(args []string) error
+	commandFuncMap map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
 }
 
 // Option defines a functional parameter for configuring a Shell instance.
@@ -59,7 +59,7 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		opt(s)
 	}
 
-	s.commandFuncMap = map[string]func([]string) error{
+	s.commandFuncMap = map[string]func([]string, io.Reader, io.Writer, io.Writer) error{
 		"exit": s.cmdExit,
 		"echo": s.cmdEcho,
 		"type": s.cmdType,
@@ -118,9 +118,10 @@ func (s *Shell) Repl() error {
 func (s *Shell) execute(input string) error {
 	pipelineStr := strings.Split(input, "|")
 
-	var cmds []*exec.Cmd
-	var pipeClosers []io.Closer
+	var externalCmds []*exec.Cmd
 	var redirectClosers []*os.File
+
+	var wg sync.WaitGroup
 
 	prevReader := s.stdIn
 	for i, cmdStr := range pipelineStr {
@@ -134,11 +135,12 @@ func (s *Shell) execute(input string) error {
 		cmdStdout := s.stdOut
 		cmdStderr := s.stdErr
 
+		var currentPipeWriter io.Closer
 		if i < len(pipelineStr)-1 {
 			pr, pw := io.Pipe()
 			cmdStdout = pw
 			prevReader = pr
-			pipeClosers = append(pipeClosers, pw)
+			currentPipeWriter = pw
 		}
 
 		var err error
@@ -150,7 +152,23 @@ func (s *Shell) execute(input string) error {
 		}
 		redirectClosers = append(redirectClosers, closer)
 
-		if _, ok := s.commandFuncMap[command]; ok {
+		if commandFunc, ok := s.commandFuncMap[command]; ok {
+			if command == "cd" || command == "exit" {
+				_ = commandFunc(args, cmdStdin, cmdStdout, cmdStderr)
+				if currentPipeWriter != nil {
+					_ = currentPipeWriter.Close()
+				}
+				continue
+			}
+			wg.Add(1)
+			go func(in io.Reader, stdout io.Writer, stderr io.Writer, pw io.Closer) {
+				defer wg.Done()
+				_ = commandFunc(args, in, stdout, stderr)
+				if pw != nil {
+					_ = pw.Close()
+				}
+			}(cmdStdin, cmdStdout, cmdStderr, currentPipeWriter)
+
 			continue
 		}
 
@@ -163,7 +181,15 @@ func (s *Shell) execute(input string) error {
 			cmd.Stdout = cmdStdout
 			cmd.Stderr = cmdStderr
 
-			cmds = append(cmds, cmd)
+			externalCmds = append(externalCmds, cmd)
+			wg.Add(1)
+			go func(c *exec.Cmd, pw io.Closer) {
+				defer wg.Done()
+				_ = c.Wait()
+				if pw != nil {
+					_ = pw.Close()
+				}
+			}(cmd, currentPipeWriter)
 		} else {
 			if _, err := fmt.Fprintf(s.stdOut, "%s: command not found\n", command); err != nil {
 				return fmt.Errorf("write command output: %w", err)
@@ -171,23 +197,11 @@ func (s *Shell) execute(input string) error {
 		}
 	}
 
-	for _, cmd := range cmds {
-		_ = cmd.Start()
-
-		for i := 0; i < len(cmds)-1; i++ {
-			cmd := cmds[i]
-			pw := pipeClosers[i]
-
-			go func(c *exec.Cmd, p io.Closer) {
-				_ = c.Wait()
-				_ = p.Close()
-			}(cmd, pw)
+	for _, cmd := range externalCmds {
+		if err := cmd.Start(); err != nil {
+			_, _ = fmt.Fprintf(s.stdErr, "failed to start %s: %v\n", cmd.Args[0], err)
 		}
-
-		if len(cmds) > 0 {
-			lastCmd := cmds[len(cmds)-1]
-			_ = lastCmd.Wait()
-		}
+		wg.Wait()
 
 		for _, c := range redirectClosers {
 			if c != nil {
