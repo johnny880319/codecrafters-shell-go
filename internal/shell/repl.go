@@ -59,11 +59,12 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	}
 
 	s.commandFuncMap = map[string]func([]string, io.Reader, io.Writer, io.Writer) error{
-		"exit": s.cmdExit,
-		"echo": s.cmdEcho,
-		"type": s.cmdType,
-		"pwd":  s.cmdPwd,
-		"cd":   s.cmdCd,
+		"exit":    s.cmdExit,
+		"echo":    s.cmdEcho,
+		"type":    s.cmdType,
+		"pwd":     s.cmdPwd,
+		"cd":      s.cmdCd,
+		"history": s.cmdHistory,
 	}
 
 	return s

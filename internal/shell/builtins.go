@@ -80,3 +80,7 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 	s.workingDir = path
 	return nil
 }
+
+func (s *Shell) cmdHistory(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error {
+	return nil
+}
