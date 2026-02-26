@@ -24,6 +24,7 @@ type Shell struct {
 	sysPath        string
 	workingDir     string
 	commandFuncMap map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
+	history        []string
 }
 
 // Option defines a functional parameter for configuring a Shell instance.
@@ -59,7 +60,6 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	}
 
 	s.commandFuncMap = s.getCommandFuncMap()
-
 	return s
 }
 
@@ -109,6 +109,7 @@ func (s *Shell) Repl() error {
 
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
+	s.history = append(s.history, input)
 	splitedInput := handleQuotesAndEscapes(input)
 	pipelineStr := splitPipeline(splitedInput)
 	var wg sync.WaitGroup

@@ -92,6 +92,11 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 	return nil
 }
 
-func (s *Shell) cmdHistory(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error {
+func (s *Shell) cmdHistory(_ []string, _ io.Reader, stdout io.Writer, _ io.Writer) error {
+	for i, cmd := range s.history {
+		if _, err := fmt.Fprintf(stdout, "%d %s\n", i+1, cmd); err != nil {
+			return err
+		}
+	}
 	return nil
 }
