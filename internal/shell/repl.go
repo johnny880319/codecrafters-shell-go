@@ -117,7 +117,6 @@ func (s *Shell) Repl() error {
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	pipelineStr := strings.Split(input, "|")
-	var redirectClosers []io.Closer
 	var wg sync.WaitGroup
 
 	prevReader := s.stdin
@@ -141,11 +140,18 @@ func (s *Shell) execute(input string) error {
 		}
 
 		args, closer, err := handleRedirect(args, &cmdStdout, &cmdStderr)
+		if closer != nil {
+			defer func(c io.Closer) {
+				_ = c.Close()
+			}(closer)
+		}
 		if err != nil {
 			_, _ = fmt.Fprintln(s.stderr, err)
+			if currentPipeWriter != nil {
+				_ = currentPipeWriter.Close()
+			}
 			continue
 		}
-		redirectClosers = append(redirectClosers, closer)
 
 		if commandFunc, ok := s.commandFuncMap[command]; ok {
 			if command == "cd" || command == "exit" {
@@ -197,17 +203,14 @@ func (s *Shell) execute(input string) error {
 			}(cmd, currentPipeWriter)
 		} else {
 			if _, err := fmt.Fprintf(s.stdout, "%s: command not found\n", command); err != nil {
+				if currentPipeWriter != nil {
+					_ = currentPipeWriter.Close()
+				}
 				return fmt.Errorf("write command output: %w", err)
 			}
 		}
 	}
 
 	wg.Wait()
-	for _, c := range redirectClosers {
-		if c != nil {
-			_ = c.Close()
-		}
-	}
-
 	return nil
 }
