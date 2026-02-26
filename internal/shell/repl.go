@@ -117,9 +117,7 @@ func (s *Shell) Repl() error {
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	pipelineStr := strings.Split(input, "|")
-
 	var redirectClosers []io.Closer
-
 	var wg sync.WaitGroup
 
 	prevReader := s.stdin
@@ -142,9 +140,7 @@ func (s *Shell) execute(input string) error {
 			currentPipeWriter = pw
 		}
 
-		var err error
-		var closer io.Closer
-		args, closer, err = handleRedirect(args, &cmdStdout, &cmdStderr)
+		args, closer, err := handleRedirect(args, &cmdStdout, &cmdStderr)
 		if err != nil {
 			_, _ = fmt.Fprintln(s.stderr, err)
 			continue
