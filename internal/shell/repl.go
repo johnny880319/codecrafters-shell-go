@@ -171,6 +171,9 @@ func (s *Shell) execute(input string) error {
 				if pw != nil {
 					_ = pw.Close()
 				}
+				if closer, ok := in.(io.ReadCloser); ok && in != s.stdin {
+					_ = closer.Close()
+				}
 			}(cmdStdin, cmdStdout, cmdStderr, currentPipeWriter)
 
 			continue
@@ -199,6 +202,9 @@ func (s *Shell) execute(input string) error {
 				_ = c.Wait()
 				if pw != nil {
 					_ = pw.Close()
+				}
+				if closer, ok := c.Stdin.(io.ReadCloser); ok && c.Stdin != s.stdin {
+					_ = closer.Close()
 				}
 			}(cmd, currentPipeWriter)
 		} else {
