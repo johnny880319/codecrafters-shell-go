@@ -118,7 +118,6 @@ func (s *Shell) Repl() error {
 func (s *Shell) execute(input string) error {
 	pipelineStr := strings.Split(input, "|")
 
-	var externalCmds []*exec.Cmd
 	var redirectClosers []*os.File
 
 	var wg sync.WaitGroup
@@ -181,7 +180,14 @@ func (s *Shell) execute(input string) error {
 			cmd.Stdout = cmdStdout
 			cmd.Stderr = cmdStderr
 
-			externalCmds = append(externalCmds, cmd)
+			if err := cmd.Start(); err != nil {
+				_, _ = fmt.Fprintf(s.stdErr, "failed to start %s: %v\n", cmd.Args[0], err)
+				if currentPipeWriter != nil {
+					_ = currentPipeWriter.Close()
+				}
+				continue
+			}
+
 			wg.Add(1)
 			go func(c *exec.Cmd, pw io.Closer) {
 				defer wg.Done()
@@ -197,16 +203,10 @@ func (s *Shell) execute(input string) error {
 		}
 	}
 
-	for _, cmd := range externalCmds {
-		if err := cmd.Start(); err != nil {
-			_, _ = fmt.Fprintf(s.stdErr, "failed to start %s: %v\n", cmd.Args[0], err)
-		}
-		wg.Wait()
-
-		for _, c := range redirectClosers {
-			if c != nil {
-				_ = c.Close()
-			}
+	wg.Wait()
+	for _, c := range redirectClosers {
+		if c != nil {
+			_ = c.Close()
 		}
 	}
 
