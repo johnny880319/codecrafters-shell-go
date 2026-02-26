@@ -58,14 +58,7 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		opt(s)
 	}
 
-	s.commandFuncMap = map[string]func([]string, io.Reader, io.Writer, io.Writer) error{
-		"exit":    s.cmdExit,
-		"echo":    s.cmdEcho,
-		"type":    s.cmdType,
-		"pwd":     s.cmdPwd,
-		"cd":      s.cmdCd,
-		"history": s.cmdHistory,
-	}
+	s.commandFuncMap = s.getCommandFuncMap()
 
 	return s
 }

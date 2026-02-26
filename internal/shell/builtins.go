@@ -8,6 +8,17 @@ import (
 	"strings"
 )
 
+func (s *Shell) getCommandFuncMap() map[string]func([]string, io.Reader, io.Writer, io.Writer) error {
+	return map[string]func([]string, io.Reader, io.Writer, io.Writer) error{
+		"exit":    s.cmdExit,
+		"echo":    s.cmdEcho,
+		"type":    s.cmdType,
+		"pwd":     s.cmdPwd,
+		"cd":      s.cmdCd,
+		"history": s.cmdHistory,
+	}
+}
+
 func (s *Shell) cmdExit(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error {
 	return io.EOF
 }
