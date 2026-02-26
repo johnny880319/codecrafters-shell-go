@@ -20,7 +20,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	if len(matches) == 0 {
 		c.tabCount = 0
-		if _, err := fmt.Fprint(c.shell.stdOut, "\x07"); err != nil {
+		if _, err := fmt.Fprint(c.shell.stdout, "\x07"); err != nil {
 			return nil, len(lineStr)
 		}
 		return nil, len(lineStr)
@@ -37,7 +37,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	if c.tabCount == 0 {
-		if _, err := fmt.Fprint(c.shell.stdOut, "\x07"); err != nil {
+		if _, err := fmt.Fprint(c.shell.stdout, "\x07"); err != nil {
 			return nil, len(lineStr)
 		}
 		c.tabCount = 1
@@ -46,21 +46,21 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	c.tabCount = 0
 
-	if _, err := fmt.Fprintln(c.shell.stdOut); err != nil {
+	if _, err := fmt.Fprintln(c.shell.stdout); err != nil {
 		return nil, len(lineStr)
 	}
 	for i, match := range matches {
-		if _, err := fmt.Fprint(c.shell.stdOut, string(line[:pos])+match); err != nil {
+		if _, err := fmt.Fprint(c.shell.stdout, string(line[:pos])+match); err != nil {
 			return nil, len(lineStr)
 		}
 		if i < len(matches)-1 {
-			if _, err := fmt.Fprint(c.shell.stdOut, "  "); err != nil {
+			if _, err := fmt.Fprint(c.shell.stdout, "  "); err != nil {
 				return nil, len(lineStr)
 			}
 		}
 	}
 
-	if _, err := fmt.Fprint(c.shell.stdOut, "\n"+prompt+string(line[:pos])); err != nil {
+	if _, err := fmt.Fprint(c.shell.stdout, "\n"+prompt+string(line[:pos])); err != nil {
 		return nil, len(lineStr)
 	}
 

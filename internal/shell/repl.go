@@ -19,9 +19,9 @@ var readlineInitMutex sync.Mutex
 
 // Shell represents the core state of the interactive shell.
 type Shell struct {
-	stdIn          io.Reader
-	stdOut         io.Writer
-	stdErr         io.Writer
+	stdin          io.Reader
+	stdout         io.Writer
+	stderr         io.Writer
 	sysPath        string
 	workingDir     string
 	commandFuncMap map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
@@ -48,9 +48,9 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	}
 
 	s := &Shell{
-		stdIn:      in,
-		stdOut:     out,
-		stdErr:     out,
+		stdin:      in,
+		stdout:     out,
+		stderr:     out,
 		sysPath:    os.Getenv("PATH"),
 		workingDir: wd,
 	}
@@ -78,9 +78,9 @@ func (s *Shell) Repl() error {
 		AutoComplete:    &customCompleter{shell: s, tabCount: 0},
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
-		Stdin:           io.NopCloser(s.stdIn),
-		Stdout:          s.stdOut,
-		Stderr:          s.stdErr,
+		Stdin:           io.NopCloser(s.stdin),
+		Stdout:          s.stdout,
+		Stderr:          s.stderr,
 	})
 	readlineInitMutex.Unlock()
 
@@ -92,7 +92,7 @@ func (s *Shell) Repl() error {
 	}()
 
 	for {
-		if _, err := fmt.Fprint(s.stdOut, prompt); err != nil {
+		if _, err := fmt.Fprint(s.stdout, prompt); err != nil {
 			return fmt.Errorf("write prompt: %w", err)
 		}
 		input, err := rl.Readline()
@@ -122,7 +122,7 @@ func (s *Shell) execute(input string) error {
 
 	var wg sync.WaitGroup
 
-	prevReader := s.stdIn
+	prevReader := s.stdin
 	for i, cmdStr := range pipelineStr {
 		command, args := parseCommand(cmdStr)
 
@@ -131,8 +131,8 @@ func (s *Shell) execute(input string) error {
 		}
 
 		cmdStdin := prevReader
-		cmdStdout := s.stdOut
-		cmdStderr := s.stdErr
+		cmdStdout := s.stdout
+		cmdStderr := s.stderr
 
 		var currentPipeWriter io.Closer
 		if i < len(pipelineStr)-1 {
@@ -146,7 +146,7 @@ func (s *Shell) execute(input string) error {
 		var closer *os.File
 		args, closer, err = handleRedirect(args, &cmdStdout, &cmdStderr)
 		if err != nil {
-			_, _ = fmt.Fprintln(s.stdErr, err)
+			_, _ = fmt.Fprintln(s.stderr, err)
 			continue
 		}
 		redirectClosers = append(redirectClosers, closer)
@@ -184,7 +184,7 @@ func (s *Shell) execute(input string) error {
 			cmd.Stderr = cmdStderr
 
 			if err := cmd.Start(); err != nil {
-				_, _ = fmt.Fprintf(s.stdErr, "failed to start %s: %v\n", cmd.Args[0], err)
+				_, _ = fmt.Fprintf(s.stderr, "failed to start %s: %v\n", cmd.Args[0], err)
 				if currentPipeWriter != nil {
 					_ = currentPipeWriter.Close()
 				}
@@ -200,7 +200,7 @@ func (s *Shell) execute(input string) error {
 				}
 			}(cmd, currentPipeWriter)
 		} else {
-			if _, err := fmt.Fprintf(s.stdOut, "%s: command not found\n", command); err != nil {
+			if _, err := fmt.Fprintf(s.stdout, "%s: command not found\n", command); err != nil {
 				return fmt.Errorf("write command output: %w", err)
 			}
 		}
