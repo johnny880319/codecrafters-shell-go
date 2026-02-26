@@ -153,7 +153,10 @@ func (s *Shell) execute(input string) error {
 
 		if commandFunc, ok := s.commandFuncMap[command]; ok {
 			if command == "cd" || command == "exit" {
-				_ = commandFunc(args, cmdStdin, cmdStdout, cmdStderr)
+				err = commandFunc(args, cmdStdin, cmdStdout, cmdStderr)
+				if errors.Is(err, io.EOF) {
+					return io.EOF
+				}
 				if currentPipeWriter != nil {
 					_ = currentPipeWriter.Close()
 				}
