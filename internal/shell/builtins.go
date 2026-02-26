@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -92,11 +93,26 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 	return nil
 }
 
-func (s *Shell) cmdHistory(_ []string, _ io.Reader, stdout io.Writer, _ io.Writer) error {
-	for i, cmd := range s.history {
-		if _, err := fmt.Fprintf(stdout, "%d %s\n", i+1, cmd); err != nil {
+func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
+	start := 1
+
+	if len(args) > 0 {
+		n, err := strconv.Atoi(args[0])
+		if err != nil {
+			if _, err := fmt.Fprintf(stderr, "history: %s: numeric argument required\n", args[0]); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		start = max(len(s.history)-n+1, 1)
+	}
+
+	for i, cmd := range s.history[start-1:] {
+		if _, err := fmt.Fprintf(stdout, "%d %s\n", i+start, cmd); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
