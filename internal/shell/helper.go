@@ -68,7 +68,7 @@ func (s *Shell) findExecutable(command string) (string, bool) {
 	return "", false
 }
 
-func handleRedirect(args []string, currStdout *io.Writer, currStderr *io.Writer) ([]string, *os.File, error) {
+func handleRedirect(args []string, currStdout *io.Writer, currStderr *io.Writer) ([]string, io.Closer, error) {
 	redirect_map := map[string]struct {
 		flag   int
 		writer *io.Writer

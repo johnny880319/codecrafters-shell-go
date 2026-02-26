@@ -118,7 +118,7 @@ func (s *Shell) Repl() error {
 func (s *Shell) execute(input string) error {
 	pipelineStr := strings.Split(input, "|")
 
-	var redirectClosers []*os.File
+	var redirectClosers []io.Closer
 
 	var wg sync.WaitGroup
 
@@ -143,7 +143,7 @@ func (s *Shell) execute(input string) error {
 		}
 
 		var err error
-		var closer *os.File
+		var closer io.Closer
 		args, closer, err = handleRedirect(args, &cmdStdout, &cmdStderr)
 		if err != nil {
 			_, _ = fmt.Fprintln(s.stderr, err)
