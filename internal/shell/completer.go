@@ -142,17 +142,18 @@ func (c *customCompleter) findPrefixExecutables(prefix string) []string {
 }
 
 func (c *customCompleter) findPrefixPaths(prefix string) []string {
-	absPathPrefix := c.shell.workingDir
+	hasTilde := false
+	workingDir := c.shell.workingDir
 	if strings.HasPrefix(prefix, "/") {
-		absPathPrefix = prefix
-	} else {
-		if strings.HasPrefix(prefix, "~") {
-			absPathPrefix = os.Getenv("HOME")
-			prefix = prefix[1:]
-		}
-		absPathPrefix = filepath.Join(absPathPrefix, prefix)
+		workingDir = ""
+	}
+	if strings.HasPrefix(prefix, "~") {
+		workingDir = os.Getenv("HOME")
+		hasTilde = true
+		prefix = prefix[1:]
 	}
 
+	absPathPrefix := filepath.Join(workingDir, prefix)
 	dir := filepath.Dir(absPathPrefix)
 	basePrefix := filepath.Base(absPathPrefix)
 
@@ -166,7 +167,14 @@ func (c *customCompleter) findPrefixPaths(prefix string) []string {
 		if !strings.HasPrefix(entry.Name(), basePrefix) {
 			continue
 		}
-		matches = append(matches, filepath.Join(dir, entry.Name()))
+		match := entry.Name()
+		if entry.IsDir() {
+			match += string(os.PathSeparator)
+		}
+		if hasTilde {
+			match = "~" + match
+		}
+		matches = append(matches, match)
 	}
 	return matches
 }
