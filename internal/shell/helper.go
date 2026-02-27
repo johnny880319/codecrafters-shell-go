@@ -72,7 +72,7 @@ func parseCharacter(r rune, escaped, inSingleQuotes, inDoubleQuotes bool) (strin
 }
 
 func (s *Shell) findExecutable(command string) (string, bool) {
-	paths := filepath.SplitList(s.sysPath)
+	paths := filepath.SplitList(s.env.path)
 	for _, dir := range paths {
 		fullPath := filepath.Join(dir, command)
 		if _, err := exec.LookPath(fullPath); err == nil {

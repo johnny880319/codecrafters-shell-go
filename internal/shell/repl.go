@@ -18,16 +18,28 @@ var readlineInitMutex sync.Mutex
 
 // Shell represents the core state of the interactive shell.
 type Shell struct {
-	stdin              io.Reader
-	stdout             io.Writer
-	stderr             io.Writer
-	sysPath            string
-	workingDir         string
-	commandFuncMap     map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
-	history            []string
-	historyStartIndex  int
-	historyAppendIndex int
-	sysHistFile        string
+	workingDir     string
+	commandFuncMap map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
+	stream         shellStream
+	env            shellEnv
+	history        shellHistory
+}
+
+type shellStream struct {
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+}
+
+type shellEnv struct {
+	path     string
+	histfile string
+}
+
+type shellHistory struct {
+	lines      []string
+	startLine  int
+	appendLine int
 }
 
 // Option defines a functional parameter for configuring a Shell instance.
@@ -35,7 +47,7 @@ type Option func(*Shell)
 
 // WithSysPath overrides the default system PATH used by the Shell.
 func WithSysPath(p string) Option {
-	return func(s *Shell) { s.sysPath = p }
+	return func(s *Shell) { s.env.path = p }
 }
 
 // WithWorkingDir overrides the default initial working directory for the Shell.
@@ -51,12 +63,9 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	}
 
 	s := &Shell{
-		stdin:       in,
-		stdout:      out,
-		stderr:      out,
-		sysPath:     os.Getenv("PATH"),
-		workingDir:  wd,
-		sysHistFile: os.Getenv("HISTFILE"),
+		stream:     shellStream{stdin: in, stdout: out, stderr: out},
+		env:        shellEnv{path: os.Getenv("PATH"), histfile: os.Getenv("HISTFILE")},
+		workingDir: wd,
 	}
 
 	for _, opt := range opts {
@@ -64,11 +73,11 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	}
 
 	s.commandFuncMap = s.getCommandFuncMap()
-	if err := s.readHistoryFromFile(s.sysHistFile, s.stderr); err != nil {
-		_, _ = fmt.Fprintf(s.stderr, "read history from file error: %v\n", err)
+	if err := s.readHistoryFromFile(s.env.histfile, s.stream.stderr); err != nil {
+		_, _ = fmt.Fprintf(s.stream.stderr, "read history from file error: %v\n", err)
 	}
-	s.historyStartIndex = len(s.history)
-	s.historyAppendIndex = len(s.history)
+	s.history.startLine = len(s.history.lines)
+	s.history.appendLine = len(s.history.lines)
 
 	return s
 }
@@ -81,9 +90,9 @@ func (s *Shell) Repl() error {
 		AutoComplete:    &customCompleter{shell: s, tabCount: 0},
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
-		Stdin:           io.NopCloser(s.stdin),
-		Stdout:          s.stdout,
-		Stderr:          s.stderr,
+		Stdin:           io.NopCloser(s.stream.stdin),
+		Stdout:          s.stream.stdout,
+		Stderr:          s.stream.stderr,
 	})
 	readlineInitMutex.Unlock()
 
@@ -95,7 +104,7 @@ func (s *Shell) Repl() error {
 	}()
 
 	for {
-		if _, err := fmt.Fprint(s.stdout, prompt); err != nil {
+		if _, err := fmt.Fprint(s.stream.stdout, prompt); err != nil {
 			return fmt.Errorf("write prompt: %w", err)
 		}
 		input, err := rl.Readline()
@@ -119,12 +128,12 @@ func (s *Shell) Repl() error {
 
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
-	s.history = append(s.history, input)
+	s.history.lines = append(s.history.lines, input)
 	splitedInput := handleQuotesAndEscapes(input)
 	pipelineStr := splitPipeline(splitedInput)
 	var wg sync.WaitGroup
 
-	prevReader := s.stdin
+	prevReader := s.stream.stdin
 	for i, cmdStr := range pipelineStr {
 		command, args := cmdStr[0], cmdStr[1:]
 
@@ -133,8 +142,8 @@ func (s *Shell) execute(input string) error {
 		}
 
 		cmdStdin := prevReader
-		cmdStdout := s.stdout
-		cmdStderr := s.stderr
+		cmdStdout := s.stream.stdout
+		cmdStderr := s.stream.stderr
 
 		var currentPipeWriter io.Closer
 		if i < len(pipelineStr)-1 {
@@ -151,7 +160,7 @@ func (s *Shell) execute(input string) error {
 			}(closer)
 		}
 		if err != nil {
-			_, _ = fmt.Fprintln(s.stderr, err)
+			_, _ = fmt.Fprintln(s.stream.stderr, err)
 			if currentPipeWriter != nil {
 				_ = currentPipeWriter.Close()
 			}
@@ -176,7 +185,7 @@ func (s *Shell) execute(input string) error {
 				if pw != nil {
 					_ = pw.Close()
 				}
-				if closer, ok := in.(io.ReadCloser); ok && in != s.stdin {
+				if closer, ok := in.(io.ReadCloser); ok && in != s.stream.stdin {
 					_ = closer.Close()
 				}
 			}(cmdStdin, cmdStdout, cmdStderr, currentPipeWriter)
@@ -194,7 +203,7 @@ func (s *Shell) execute(input string) error {
 			cmd.Stderr = cmdStderr
 
 			if err := cmd.Start(); err != nil {
-				_, _ = fmt.Fprintf(s.stderr, "failed to start %s: %v\n", cmd.Args[0], err)
+				_, _ = fmt.Fprintf(s.stream.stderr, "failed to start %s: %v\n", cmd.Args[0], err)
 				if currentPipeWriter != nil {
 					_ = currentPipeWriter.Close()
 				}
@@ -208,12 +217,12 @@ func (s *Shell) execute(input string) error {
 				if pw != nil {
 					_ = pw.Close()
 				}
-				if closer, ok := c.Stdin.(io.ReadCloser); ok && c.Stdin != s.stdin {
+				if closer, ok := c.Stdin.(io.ReadCloser); ok && c.Stdin != s.stream.stdin {
 					_ = closer.Close()
 				}
 			}(cmd, currentPipeWriter)
 		} else {
-			if _, err := fmt.Fprintf(s.stdout, "%s: command not found\n", command); err != nil {
+			if _, err := fmt.Fprintf(s.stream.stdout, "%s: command not found\n", command); err != nil {
 				if currentPipeWriter != nil {
 					_ = currentPipeWriter.Close()
 				}

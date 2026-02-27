@@ -23,7 +23,7 @@ func (s *Shell) getCommandFuncMap() map[string]func([]string, io.Reader, io.Writ
 }
 
 func (s *Shell) cmdExit(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error {
-	_ = s.writeHistoryToFile(s.sysHistFile, s.stderr, os.O_APPEND, s.historyStartIndex)
+	_ = s.writeHistoryToFile(s.env.histfile, s.stream.stderr, os.O_APPEND, s.history.startLine)
 	return io.EOF
 }
 
@@ -106,8 +106,8 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 	}
 
 	if len(args) > 0 && args[0] == "-a" {
-		err := s.writeHistoryToFile(args[1], stderr, os.O_APPEND, s.historyAppendIndex)
-		s.historyAppendIndex = len(s.history)
+		err := s.writeHistoryToFile(args[1], stderr, os.O_APPEND, s.history.appendLine)
+		s.history.appendLine = len(s.history.lines)
 		return err
 	}
 
@@ -122,10 +122,10 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 			return nil
 		}
 
-		start = max(len(s.history)-n+1, 1)
+		start = max(len(s.history.lines)-n+1, 1)
 	}
 
-	for i, cmd := range s.history[start-1:] {
+	for i, cmd := range s.history.lines[start-1:] {
 		if _, err := fmt.Fprintf(stdout, "%d %s\n", i+start, cmd); err != nil {
 			return err
 		}
@@ -154,7 +154,7 @@ func (s *Shell) readHistoryFromFile(filepath string, stderr io.Writer) error {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		s.history = append(s.history, line)
+		s.history.lines = append(s.history.lines, line)
 	}
 	if err := scanner.Err(); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -180,7 +180,7 @@ func (s *Shell) writeHistoryToFile(filepath string, stderr io.Writer, flag int, 
 	}()
 
 	writer := bufio.NewWriter(file)
-	for _, cmd := range s.history[index:] {
+	for _, cmd := range s.history.lines[index:] {
 		if _, err := writer.WriteString(cmd + "\n"); err != nil {
 			return fmt.Errorf("write history to file: %w", err)
 		}
