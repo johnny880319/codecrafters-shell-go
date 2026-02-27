@@ -97,7 +97,7 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
-	if args[0] == "-r" {
+	if len(args) > 1 && args[0] == "-r" {
 		historyFilePath := filepath.Join(s.workingDir, args[1])
 		//nolint:gosec // A shell's intended behavior is to open files specified by the user
 		file, err := os.Open(historyFilePath)
