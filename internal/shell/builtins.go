@@ -154,6 +154,34 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 		return nil
 	}
 
+	if len(args) > 0 && args[0] == "-a" {
+		historyFilePath := args[1]
+		// if file exists, truncate it; if not, create it.
+		//nolint:gosec // A shell's intended behavior is to open files specified by the user
+		file, err := os.OpenFile(historyFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			return fmt.Errorf("open history file: %w", err)
+		}
+		defer func() {
+			if err := file.Close(); err != nil {
+				if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
+					return
+				}
+			}
+		}()
+
+		writer := bufio.NewWriter(file)
+		for _, cmd := range s.history {
+			if _, err := writer.WriteString(cmd + "\n"); err != nil {
+				return fmt.Errorf("write history to file: %w", err)
+			}
+		}
+		if err := writer.Flush(); err != nil {
+			return fmt.Errorf("flush history to file: %w", err)
+		}
+		return nil
+	}
+
 	start := 1
 
 	if len(args) > 0 {
