@@ -2,72 +2,100 @@
 
 # codecrafters-shell-go
 
-Modern Go baseline for the CodeCrafters "Build Your Own Shell" challenge.
+Go implementation for the CodeCrafters "Build Your Own Shell" challenge.
 
-This repository is intentionally set up with strict quality gates, reproducible tooling, and CI checks so you can focus on implementing shell features safely.
-
-Contribution workflow and PR checklist: see `CONTRIBUTING.md`.
+This repository now contains an actively implemented shell, not just a starter skeleton.
 
 Configuration note:
-- This tooling stack is an AI-suggested baseline.
-- The repository owner is still learning these tools, so configuration may be adjusted over time as understanding improves.
+- This tooling stack is AI-suggested.
+- The repository owner is still learning these tools and may refine settings over time.
 
-## 1) Project structure
+## Implemented Features
+
+- REPL loop with interactive input (`readline`)
+- Builtins: `exit`, `echo`, `type`, `pwd`, `cd`, `history`
+- External command execution via `PATH` lookup
+- Pipelines (`|`)
+- Redirection: `>`, `1>`, `2>`, `>>`, `1>>`, `2>>`
+- Quote and escape handling:
+  - single quotes
+  - double quotes
+  - backslash escaping
+- Tab completion:
+  - command completion (builtins + executables)
+  - filesystem path completion
+  - double-tab list behavior
+- Shell history in memory and file-backed history through `HISTFILE`
+  (`history -r`, `history -w`, `history -a`)
+
+## Project Layout
 
 ```text
 .
-├── cmd/my_shell/main.go        # Application entrypoint only
-├── internal/shell/repl.go      # Core shell logic (private to this module)
-├── internal/shell/repl_test.go # Unit tests for shell logic
-├── .golangci.yaml              # Strict lint config
-├── .golangci-version           # Single source of truth for golangci-lint version
-├── .pre-commit-config.yaml     # Fast local quality gates
-├── .github/workflows/go.yml    # CI checks on push/PR
-├── Dockerfile                  # Multi-stage container build
-└── Makefile                    # Common developer commands
+├── cmd/my_shell/main.go         # Entrypoint
+├── internal/shell/repl.go       # REPL and command execution
+├── internal/shell/builtins.go   # Builtin command implementations
+├── internal/shell/helper.go     # Parsing, path lookup, redirection helpers
+├── internal/shell/completer.go  # Tab completion logic
+├── internal/shell/repl_test.go  # Unit tests
+├── .github/workflows/go.yml     # CI checks
+├── .golangci.yaml               # Lint config (v2 schema)
+├── .golangci-version            # Pinned golangci-lint version
+├── .pre-commit-config.yaml      # Pre-commit checks
+├── Makefile                     # Local automation
+├── Dockerfile                   # Multi-stage container build
+└── .vscode/launch.json          # VS Code debug target (cmd/my_shell)
 ```
 
-Design note:
-- `cmd/` is for executables.
-- `internal/` is for app logic that should not be imported by other modules.
-- `pkg/` is intentionally omitted until you truly need a public library API.
+## Prerequisites
 
-## 2) Strict linting
+- Go `1.25.x`
+- `golangci-lint` `v2.x` (pinned in `.golangci-version`)
+- `pre-commit` (optional but recommended)
+- Docker or Podman (optional)
 
-Linting is handled by `golangci-lint` with an explicit strict set in `.golangci.yaml`:
-- correctness: `govet`, `staticcheck`, `errcheck`, `errorlint`, `ineffassign`, `unused`
-- security: `gosec`
-- maintainability/style: `revive`, `gocritic`, `gocognit`, `lll`, `misspell`, `nolintlint`
-- toolchain baseline: `golangci-lint v2.x`
+## Run Locally
 
-Why explicit list instead of `enable-all`:
-- `enable-all` often breaks when new/deprecated linters are added in future releases.
-- Explicit lists are still strict, but stable and maintainable in CI.
+```bash
+./your_program.sh
+```
 
-## 3) Auto-format on save
+or
 
-VS Code settings are provided in `.vscode/settings.json`:
-- format on save is enabled for Go files
-- imports are organized on save
-- `gofumpt` mode is enabled in `gopls`
+```bash
+make run
+```
 
-Command line format checks:
-- `make fmt` to auto-format
-- `make fmt-check` to fail if formatting is not clean
+## Debug in VS Code
 
-## 4) Environment management (Go equivalent)
+Use `Debug my_shell` in `.vscode/launch.json`.
+It points to `cmd/my_shell`, so breakpoints should work without the
+`no Go files in <repo-root>` build error.
 
-Go projects usually do **not** use virtualenv-style tooling (like Python `uv`).
-The standard, idiomatic approach is:
-- `go.mod` + `go.sum` for dependency management
-- `go` directive in `go.mod` to define expected language/toolchain baseline
+## Testing and Quality
 
-This repo uses:
-- `go 1.25.0`
+Common commands:
 
-## 5) CI/CD quality gates
+- `make fmt`
+- `make fmt-check`
+- `make vet`
+- `make lint`
+- `make test`
+- `make test-race`
+- `make ci` (runs the full local CI-equivalent pipeline)
 
-GitHub Actions workflow (`.github/workflows/go.yml`) runs on push/PR to `main`/`master`:
+Pre-commit:
+
+```bash
+PRE_COMMIT_HOME=$PWD/.cache/pre-commit pre-commit install --install-hooks
+make pre-commit
+```
+
+## CI
+
+GitHub Actions (`.github/workflows/go.yml`) runs on `push`/`pull_request` to
+`main`/`master`:
+
 1. `gofmt` check
 2. `go vet`
 3. `golangci-lint`
@@ -75,75 +103,22 @@ GitHub Actions workflow (`.github/workflows/go.yml`) runs on push/PR to `main`/`
 5. `go build`
 6. `docker build`
 
-If any step fails, the workflow fails and merge should be blocked by branch protection.
+## Container
 
-## 6) pre-commit strategy
-
-`pre-commit` runs fast checks before commit:
-- whitespace/yaml/conflict checks
-- `gofmt`
-- `go vet`
-- `golangci-lint`
-
-About tests in pre-commit:
-- Your understanding is correct in most teams.
-- Keep `pre-commit` fast; run full tests in CI (or `pre-push` if needed).
-
-## 7) Unit test baseline
-
-A minimal testable shell unit is already in place:
-- `internal/shell/repl.go`
-- `internal/shell/repl_test.go`
-
-This gives you a clean pattern to add tests stage-by-stage as shell behavior grows.
-
-## 8) Containerization: when and why
-
-Current Docker setup is multi-stage:
-- stage 1: build binary
-- stage 2: minimal runtime image
-
-Benefits:
-- same runtime behavior across machines/CI
-- cleaner onboarding (no local Go setup needed to run built image)
-- production-like packaging if you later deploy this shell service/tool
-
-When useful for this challenge:
-- validating build reproducibility in CI
-- sharing a runnable artifact with others
-
-## 9) Makefile automation
-
-Useful targets:
-- `make ci` (format + vet + lint + tests + build)
-- `make lint`
-- `make test-race`
-- `make docker-build`
-- `make docker-run`
-
-## 10) Extra maturity items already included / recommended
-
-Included:
-- `.editorconfig`
-- `.gitignore`
-- `.dockerignore`
-
-Recommended next:
-1. Add branch protection on `main` so CI must pass before merge.
-2. Add Dependabot for Go modules and GitHub Actions updates.
-3. Add coverage upload/reporting once test volume increases.
-
-## Quick start
+Build and run:
 
 ```bash
-make ci
-./your_program.sh
+make docker-build
+make docker-run
 ```
 
-## CodeCrafters runtime scripts
+The Dockerfile uses a multi-stage build:
 
-- Local run script: `your_program.sh`
-- Remote compile script: `.codecrafters/compile.sh`
-- Remote run script: `.codecrafters/run.sh`
+- builder: `golang:1.25-alpine`
+- runtime: `alpine:3.23`
 
-Both local/remote compile scripts build `./cmd/my_shell`, so package structure changes are automatically included.
+## Notes
+
+- `CONTRIBUTING.md` contains commit/PR workflow and checklist.
+- This is still an in-progress shell implementation; missing POSIX features
+  are expected as challenge stages advance.
