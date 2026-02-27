@@ -70,13 +70,15 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 			_, _ = fmt.Fprintf(s.stderr, "open history file error: %v\n", err)
 		}
 	}
-	defer func(file io.Closer) {
-		if err := file.Close(); err != nil {
-			if _, err := fmt.Fprintf(s.stderr, "close history file error: %v\n", err); err != nil {
-				return
+	if file != nil {
+		defer func(file io.Closer) {
+			if err := file.Close(); err != nil {
+				if _, err := fmt.Fprintf(s.stderr, "close history file error: %v\n", err); err != nil {
+					return
+				}
 			}
-		}
-	}(file)
+		}(file)
+	}
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
