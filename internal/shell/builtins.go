@@ -122,67 +122,19 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 	return nil
 }
 
-//nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
 	if len(args) > 1 && args[0] == "-r" {
 		return s.readHistoryFromFile(args[1], stderr)
 	}
 
 	if len(args) > 0 && args[0] == "-w" {
-		historyFilePath := args[1]
-		// if file exists, truncate it; if not, create it.
-		//nolint:gosec // A shell's intended behavior is to open files specified by the user
-		file, err := os.OpenFile(historyFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-		if err != nil {
-			return fmt.Errorf("open history file: %w", err)
-		}
-		defer func() {
-			if err := file.Close(); err != nil {
-				if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
-					return
-				}
-			}
-		}()
-
-		writer := bufio.NewWriter(file)
-		for _, cmd := range s.history {
-			if _, err := writer.WriteString(cmd + "\n"); err != nil {
-				return fmt.Errorf("write history to file: %w", err)
-			}
-		}
-		if err := writer.Flush(); err != nil {
-			return fmt.Errorf("flush history to file: %w", err)
-		}
-		return nil
+		return s.writeHistoryToFile(args[1], stderr, os.O_TRUNC, 0)
 	}
 
 	if len(args) > 0 && args[0] == "-a" {
-		historyFilePath := args[1]
-		// if file exists, truncate it; if not, create it.
-		//nolint:gosec // A shell's intended behavior is to open files specified by the user
-		file, err := os.OpenFile(historyFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err != nil {
-			return fmt.Errorf("open history file: %w", err)
-		}
-		defer func() {
-			if err := file.Close(); err != nil {
-				if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
-					return
-				}
-			}
-		}()
-
-		writer := bufio.NewWriter(file)
-		for _, cmd := range s.history[s.historyAppendIndex:] {
-			if _, err := writer.WriteString(cmd + "\n"); err != nil {
-				return fmt.Errorf("write history to file: %w", err)
-			}
-		}
-		if err := writer.Flush(); err != nil {
-			return fmt.Errorf("flush history to file: %w", err)
-		}
+		err := s.writeHistoryToFile(args[1], stderr, os.O_APPEND, s.historyAppendIndex)
 		s.historyAppendIndex = len(s.history)
-		return nil
+		return err
 	}
 
 	start := 1
@@ -235,6 +187,32 @@ func (s *Shell) readHistoryFromFile(filepath string, stderr io.Writer) error {
 			_, printfErr := fmt.Fprintf(stderr, "history: %s: No such file or directory\n", filepath)
 			return printfErr
 		}
+	}
+	return nil
+}
+
+func (s *Shell) writeHistoryToFile(filepath string, stderr io.Writer, flag int, index int) error {
+	//nolint:gosec // A shell's intended behavior is to open files specified by the user
+	file, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|flag, 0o644)
+	if err != nil {
+		return fmt.Errorf("open history file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
+				return
+			}
+		}
+	}()
+
+	writer := bufio.NewWriter(file)
+	for _, cmd := range s.history[index:] {
+		if _, err := writer.WriteString(cmd + "\n"); err != nil {
+			return fmt.Errorf("write history to file: %w", err)
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return fmt.Errorf("flush history to file: %w", err)
 	}
 	return nil
 }
