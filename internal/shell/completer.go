@@ -175,7 +175,7 @@ func (c *customCompleter) findPrefixPaths(prefix string) []string {
 		if hasTilde {
 			match = "~" + match
 		}
-		matches = append(matches, filepath.Join(prefixDir, match))
+		matches = append(matches, prefixDir+"/"+match)
 	}
 	return matches
 }
