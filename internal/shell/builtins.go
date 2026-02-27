@@ -23,7 +23,7 @@ func (s *Shell) getCommandFuncMap() map[string]func([]string, io.Reader, io.Writ
 }
 
 func (s *Shell) cmdExit(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error {
-	file, err := os.Open(s.sysHistFile)
+	file, err := os.OpenFile(s.sysHistFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			_, _ = fmt.Fprintf(s.stderr, "open history file error: %v\n", err)
