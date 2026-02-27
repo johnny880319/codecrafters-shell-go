@@ -42,13 +42,12 @@ func (s *Shell) cmdExit(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error
 		writer := bufio.NewWriter(file)
 		for _, cmd := range s.history[s.historyStartIndex:] {
 			if _, err := writer.WriteString(cmd + "\n"); err != nil {
-				return fmt.Errorf("write history to file: %w", err)
+				_, _ = fmt.Fprintf(s.stderr, "write history to file error: %v\n", err)
 			}
 		}
 		if err := writer.Flush(); err != nil {
-			return fmt.Errorf("flush history to file: %w", err)
+			_, _ = fmt.Fprintf(s.stderr, "flush history to file error: %v\n", err)
 		}
-		return nil
 	}
 
 	return io.EOF
