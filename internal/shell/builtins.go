@@ -125,32 +125,9 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
 	if len(args) > 1 && args[0] == "-r" {
-		historyFilePath := args[1]
-		//nolint:gosec // A shell's intended behavior is to open files specified by the user
-		file, err := os.Open(historyFilePath)
-		if err != nil {
-			return fmt.Errorf("open history file: %w", err)
+		if err := s.readHistoryFromFile(args[1], stderr); err != nil {
+			return err
 		}
-		defer func() {
-			if err := file.Close(); err != nil {
-				if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
-					return
-				}
-			}
-		}()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			line := scanner.Text()
-			s.history = append(s.history, line)
-		}
-		if err := scanner.Err(); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				_, printfErr := fmt.Fprintf(stderr, "history: %s: No such file or directory\n", args[1])
-				return printfErr
-			}
-		}
-		return nil
 	}
 
 	if len(args) > 0 && args[0] == "-w" {
@@ -230,5 +207,33 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 		}
 	}
 
+	return nil
+}
+
+func (s *Shell) readHistoryFromFile(filepath string, stderr io.Writer) error {
+	//nolint:gosec // A shell's intended behavior is to open files specified by the user
+	file, err := os.Open(filepath)
+	if err != nil {
+		return fmt.Errorf("open history file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
+				return
+			}
+		}
+	}()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		s.history = append(s.history, line)
+	}
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			_, printfErr := fmt.Fprintf(stderr, "history: %s: No such file or directory\n", filepath)
+			return printfErr
+		}
+	}
 	return nil
 }
