@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -26,6 +27,7 @@ type Shell struct {
 	commandFuncMap     map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
 	history            []string
 	historyAppendCount int
+	sysHistFile        string
 }
 
 // Option defines a functional parameter for configuring a Shell instance.
@@ -49,11 +51,12 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	}
 
 	s := &Shell{
-		stdin:      in,
-		stdout:     out,
-		stderr:     out,
-		sysPath:    os.Getenv("PATH"),
-		workingDir: wd,
+		stdin:       in,
+		stdout:      out,
+		stderr:      out,
+		sysPath:     os.Getenv("PATH"),
+		workingDir:  wd,
+		sysHistFile: os.Getenv("HISTFILE"),
 	}
 
 	for _, opt := range opts {
@@ -61,6 +64,31 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	}
 
 	s.commandFuncMap = s.getCommandFuncMap()
+	file, err := os.Open(s.sysHistFile)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			_, _ = fmt.Fprintf(s.stderr, "open history file error: %v\n", err)
+		}
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			if _, err := fmt.Fprintf(s.stderr, "close history file error: %v\n", err); err != nil {
+				return
+			}
+		}
+	}()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		s.history = append(s.history, line)
+	}
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			_, _ = fmt.Fprintf(s.stderr, "history: %s: No such file or directory\n", s.sysHistFile)
+		}
+	}
+
 	return s
 }
 
