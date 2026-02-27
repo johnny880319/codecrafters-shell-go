@@ -23,33 +23,7 @@ func (s *Shell) getCommandFuncMap() map[string]func([]string, io.Reader, io.Writ
 }
 
 func (s *Shell) cmdExit(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error {
-	file, err := os.OpenFile(s.sysHistFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			_, _ = fmt.Fprintf(s.stderr, "open history file error: %v\n", err)
-		}
-	}
-
-	if file != nil {
-		defer func(file io.Closer) {
-			if err := file.Close(); err != nil {
-				if _, err := fmt.Fprintf(s.stderr, "close history file error: %v\n", err); err != nil {
-					return
-				}
-			}
-		}(file)
-
-		writer := bufio.NewWriter(file)
-		for _, cmd := range s.history[s.historyStartIndex:] {
-			if _, err := writer.WriteString(cmd + "\n"); err != nil {
-				_, _ = fmt.Fprintf(s.stderr, "write history to file error: %v\n", err)
-			}
-		}
-		if err := writer.Flush(); err != nil {
-			_, _ = fmt.Fprintf(s.stderr, "flush history to file error: %v\n", err)
-		}
-	}
-
+	_ = s.writeHistoryToFile(s.sysHistFile, s.stderr, os.O_APPEND, s.historyStartIndex)
 	return io.EOF
 }
 
