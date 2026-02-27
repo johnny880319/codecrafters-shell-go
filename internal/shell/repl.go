@@ -26,6 +26,7 @@ type Shell struct {
 	workingDir         string
 	commandFuncMap     map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
 	history            []string
+	historyStartIndex  int
 	historyAppendCount int
 	sysHistFile        string
 }
@@ -78,17 +79,18 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 				}
 			}
 		}(file)
-	}
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		s.history = append(s.history, line)
-	}
-	if err := scanner.Err(); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			_, _ = fmt.Fprintf(s.stderr, "history: %s: No such file or directory\n", s.sysHistFile)
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+			s.history = append(s.history, line)
 		}
+		if err := scanner.Err(); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				_, _ = fmt.Fprintf(s.stderr, "history: %s: No such file or directory\n", s.sysHistFile)
+			}
+		}
+		s.historyStartIndex = len(s.history)
 	}
 
 	return s
