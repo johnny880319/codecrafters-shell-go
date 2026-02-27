@@ -55,7 +55,10 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		return nil, len(lineStr)
 	}
 	for i, match := range matches {
-		if _, err := fmt.Fprint(c.shell.stream.stdout, string(line[:pos])+match); err != nil {
+		toPrint := string(line[:pos]) + match
+		toPrintSlice := strings.Split(toPrint, " ")
+		toPrint = toPrintSlice[len(toPrintSlice)-1]
+		if _, err := fmt.Fprint(c.shell.stream.stdout, toPrint); err != nil {
 			return nil, len(lineStr)
 		}
 		if i < len(matches)-1 {
