@@ -125,9 +125,7 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
 	if len(args) > 1 && args[0] == "-r" {
-		if err := s.readHistoryFromFile(args[1], stderr); err != nil {
-			return err
-		}
+		return s.readHistoryFromFile(args[1], stderr)
 	}
 
 	if len(args) > 0 && args[0] == "-w" {
