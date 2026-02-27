@@ -85,18 +85,26 @@ func longestCommonPrefix(strs []string) string {
 
 func (c *customCompleter) getMatchStrings(lineStr string) []string {
 	var matches []string
-	for builtin := range c.shell.commandFuncMap {
-		if strings.HasPrefix(builtin, lineStr) {
-			completion := builtin[len(lineStr):]
+	splitedStr := strings.Split(lineStr, " ")
+	if len(splitedStr) == 1 {
+		for builtin := range c.shell.commandFuncMap {
+			if strings.HasPrefix(builtin, lineStr) {
+				completion := builtin[len(lineStr):]
+				matches = append(matches, completion)
+			}
+		}
+
+		for _, cmd := range c.findPrefixExecutables(lineStr) {
+			completion := cmd[len(lineStr):]
+			matches = append(matches, completion)
+		}
+	} else {
+		lastPart := splitedStr[len(splitedStr)-1]
+		for _, cmd := range c.findPrefixPaths(lastPart) {
+			completion := cmd[len(lastPart):]
 			matches = append(matches, completion)
 		}
 	}
-
-	for _, cmd := range c.findPrefixExecutables(lineStr) {
-		completion := cmd[len(lineStr):]
-		matches = append(matches, completion)
-	}
-
 	slices.Sort(matches)
 	return slices.Compact(matches)
 }
@@ -131,4 +139,34 @@ func (c *customCompleter) findPrefixExecutables(prefix string) []string {
 		result = append(result, match)
 	}
 	return result
+}
+
+func (c *customCompleter) findPrefixPaths(prefix string) []string {
+	absPathPrefix := c.shell.workingDir
+	if strings.HasPrefix(prefix, "/") {
+		absPathPrefix = prefix
+	} else {
+		if strings.HasPrefix(prefix, "~") {
+			absPathPrefix = os.Getenv("HOME")
+			prefix = prefix[1:]
+		}
+		absPathPrefix = filepath.Join(absPathPrefix, prefix)
+	}
+
+	dir := filepath.Dir(absPathPrefix)
+	basePrefix := filepath.Base(absPathPrefix)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var matches []string
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), basePrefix) {
+			continue
+		}
+		matches = append(matches, filepath.Join(dir, entry.Name()))
+	}
+	return matches
 }
