@@ -123,6 +123,7 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 				return printfErr
 			}
 		}
+		return nil
 	}
 
 	start := 1
