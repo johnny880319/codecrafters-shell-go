@@ -14,8 +14,6 @@ type customCompleter struct {
 }
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
-//
-//nolint:gocognit // Will be refactored in a future exercise
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	lineStr := string(line[:pos])
 	matches := c.getMatchStrings(lineStr)
@@ -30,10 +28,11 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	if len(matches) == 1 {
 		c.tabCount = 0
+		trail := " "
 		if matches[0][len(matches[0])-1] == '/' {
-			return [][]rune{[]rune(matches[0])}, len(lineStr)
+			trail = ""
 		}
-		return [][]rune{[]rune(matches[0] + " ")}, len(lineStr)
+		return [][]rune{[]rune(matches[0] + trail)}, len(lineStr)
 	}
 
 	if longest := longestCommonPrefix(matches); longest != "" && longest != lineStr {
@@ -48,14 +47,17 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		c.tabCount = 1
 		return nil, len(lineStr)
 	}
-
 	c.tabCount = 0
 
+	return c.handleMultipleMatches(matches, lineStr)
+}
+
+func (c *customCompleter) handleMultipleMatches(matches []string, lineStr string) (newLine [][]rune, length int) {
 	if _, err := fmt.Fprintln(c.shell.stream.stdout); err != nil {
 		return nil, len(lineStr)
 	}
 	for i, match := range matches {
-		toPrint := string(line[:pos]) + match
+		toPrint := lineStr + match
 		toPrintSlice := strings.Split(toPrint, " ")
 		toPrint = toPrintSlice[len(toPrintSlice)-1]
 		if _, err := fmt.Fprint(c.shell.stream.stdout, toPrint); err != nil {
@@ -68,7 +70,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		}
 	}
 
-	if _, err := fmt.Fprint(c.shell.stream.stdout, "\n"+prompt+string(line[:pos])); err != nil {
+	if _, err := fmt.Fprint(c.shell.stream.stdout, "\n"+prompt+lineStr); err != nil {
 		return nil, len(lineStr)
 	}
 
