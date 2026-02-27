@@ -153,6 +153,7 @@ func (c *customCompleter) findPrefixPaths(prefix string) []string {
 		prefix = prefix[1:]
 	}
 
+	prefixDir := filepath.Dir(prefix)
 	absPathPrefix := filepath.Join(workingDir, prefix)
 	dir := filepath.Dir(absPathPrefix)
 	basePrefix := filepath.Base(absPathPrefix)
@@ -174,7 +175,7 @@ func (c *customCompleter) findPrefixPaths(prefix string) []string {
 		if hasTilde {
 			match = "~" + match
 		}
-		matches = append(matches, match)
+		matches = append(matches, filepath.Join(prefixDir, match))
 	}
 	return matches
 }
