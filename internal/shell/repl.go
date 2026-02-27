@@ -27,7 +27,7 @@ type Shell struct {
 	commandFuncMap     map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
 	history            []string
 	historyStartIndex  int
-	historyAppendCount int
+	historyAppendIndex int
 	sysHistFile        string
 }
 
@@ -91,6 +91,7 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 			}
 		}
 		s.historyStartIndex = len(s.history)
+		s.historyAppendIndex = len(s.history)
 	}
 
 	return s
@@ -143,7 +144,6 @@ func (s *Shell) Repl() error {
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	s.history = append(s.history, input)
-	s.historyAppendCount++
 	splitedInput := handleQuotesAndEscapes(input)
 	pipelineStr := splitPipeline(splitedInput)
 	var wg sync.WaitGroup
