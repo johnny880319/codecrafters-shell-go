@@ -52,35 +52,6 @@ func splitPipeline(input []string) [][]string {
 	return pipeline
 }
 
-// func parseCommand(input string) (command string, args []string) {
-// 	fields := []string{}
-// 	var str string
-// 	escaped := false
-// 	inSingleQuotes := false
-// 	inDoubleQuotes := false
-// 	curField := ""
-// 	for _, r := range input {
-// 		if r == ' ' && !inSingleQuotes && !inDoubleQuotes && !escaped {
-// 			if curField != "" {
-// 				fields = append(fields, curField)
-// 				curField = ""
-// 			}
-// 			continue
-// 		}
-// 		str, escaped, inSingleQuotes, inDoubleQuotes = parseCharacter(r, escaped, inSingleQuotes, inDoubleQuotes)
-// 		curField += str
-// 	}
-
-// 	if curField != "" {
-// 		fields = append(fields, curField)
-// 	}
-
-// 	if len(fields) == 0 {
-// 		return "", nil
-// 	}
-// 	return fields[0], fields[1:]
-// }
-
 func parseCharacter(r rune, escaped, inSingleQuotes, inDoubleQuotes bool) (string, bool, bool, bool) {
 	if escaped && (inDoubleQuotes && !strings.ContainsRune("\"\\$`\n", r)) {
 		return "\\" + string(r), false, inSingleQuotes, inDoubleQuotes
