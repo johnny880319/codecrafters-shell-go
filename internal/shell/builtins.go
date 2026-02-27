@@ -1,0 +1,192 @@
+package shell
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+func (s *Shell) getCommandFuncMap() map[string]func([]string, io.Reader, io.Writer, io.Writer) error {
+	return map[string]func([]string, io.Reader, io.Writer, io.Writer) error{
+		"exit":    s.cmdExit,
+		"echo":    s.cmdEcho,
+		"type":    s.cmdType,
+		"pwd":     s.cmdPwd,
+		"cd":      s.cmdCd,
+		"history": s.cmdHistory,
+	}
+}
+
+func (s *Shell) cmdExit(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error {
+	_ = s.writeHistoryToFile(s.env.histfile, s.stream.stderr, os.O_APPEND, s.history.startLine)
+	return io.EOF
+}
+
+func (s *Shell) cmdEcho(args []string, _ io.Reader, stdout io.Writer, _ io.Writer) error {
+	_, err := fmt.Fprintln(stdout, strings.Join(args, " "))
+	return err
+}
+
+func (s *Shell) cmdType(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
+	for _, arg := range args {
+		if _, ok := s.commandFuncMap[arg]; ok {
+			if _, err := fmt.Fprintf(stdout, "%s is a shell builtin\n", arg); err != nil {
+				return err
+			}
+		} else if path, found := s.findExecutable(arg); found {
+			if _, err := fmt.Fprintf(stdout, "%s is %s\n", arg, path); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintf(stderr, "%s: not found\n", arg); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Shell) cmdPwd(_ []string, _ io.Reader, stdout io.Writer, _ io.Writer) error {
+	_, err := fmt.Fprintln(stdout, s.workingDir)
+	return err
+}
+
+func (s *Shell) cmdCd(args []string, _ io.Reader, _ io.Writer, stderr io.Writer) error {
+	if len(args) == 0 {
+		s.workingDir = os.Getenv("HOME")
+		return nil
+	}
+	if len(args) > 1 {
+		_, err := fmt.Fprintln(stderr, "cd: too many arguments")
+		return err
+	}
+
+	newPath := args[0]
+	if filepath.IsAbs(newPath) {
+		return s.checkDirectory(newPath, stderr)
+	}
+
+	if strings.HasPrefix(newPath, "~") {
+		s.workingDir = os.Getenv("HOME")
+		newPath = newPath[1:]
+	}
+	absPath := filepath.Join(s.workingDir, newPath)
+	return s.checkDirectory(absPath, stderr)
+}
+
+func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		_, printfErr := fmt.Fprintf(stderr, "cd: %s: No such file or directory\n", path)
+		return printfErr
+	}
+	if err != nil {
+		return fmt.Errorf("check directory: %w", err)
+	}
+	if !info.IsDir() {
+		_, printfErr := fmt.Fprintf(stderr, "cd: %s: Not a directory\n", path)
+		return printfErr
+	}
+	s.workingDir = path
+	return nil
+}
+
+func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
+	if len(args) > 1 && args[0] == "-r" {
+		return s.readHistoryFromFile(args[1], stderr)
+	}
+
+	if len(args) > 0 && args[0] == "-w" {
+		return s.writeHistoryToFile(args[1], stderr, os.O_TRUNC, 0)
+	}
+
+	if len(args) > 0 && args[0] == "-a" {
+		err := s.writeHistoryToFile(args[1], stderr, os.O_APPEND, s.history.appendLine)
+		s.history.appendLine = len(s.history.lines)
+		return err
+	}
+
+	start := 1
+
+	if len(args) > 0 {
+		n, err := strconv.Atoi(args[0])
+		if err != nil {
+			if _, err := fmt.Fprintf(stderr, "history: %s: numeric argument required\n", args[0]); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		start = max(len(s.history.lines)-n+1, 1)
+	}
+
+	for i, cmd := range s.history.lines[start-1:] {
+		if _, err := fmt.Fprintf(stdout, "%d %s\n", i+start, cmd); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Shell) readHistoryFromFile(filepath string, stderr io.Writer) error {
+	//nolint:gosec // A shell's intended behavior is to open files specified by the user
+	file, err := os.Open(filepath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("open history file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
+				return
+			}
+		}
+	}()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		s.history.lines = append(s.history.lines, line)
+	}
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			_, printfErr := fmt.Fprintf(stderr, "history: %s: No such file or directory\n", filepath)
+			return printfErr
+		}
+	}
+	return nil
+}
+
+func (s *Shell) writeHistoryToFile(filepath string, stderr io.Writer, flag int, index int) error {
+	//nolint:gosec // A shell's intended behavior is to open files specified by the user
+	file, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|flag, 0o644)
+	if err != nil {
+		return fmt.Errorf("open history file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
+				return
+			}
+		}
+	}()
+
+	writer := bufio.NewWriter(file)
+	for _, cmd := range s.history.lines[index:] {
+		if _, err := writer.WriteString(cmd + "\n"); err != nil {
+			return fmt.Errorf("write history to file: %w", err)
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return fmt.Errorf("flush history to file: %w", err)
+	}
+	return nil
+}

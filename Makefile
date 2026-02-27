@@ -34,7 +34,7 @@ fmt:
 	@$(GO_ENV) $(GO) fmt $(PKG)
 
 fmt-check:
-	@unformatted="$$(gofmt -l .)"; \
+	@unformatted="$$(find . -name '*.go' -not -path "./.cache/*" | xargs gofmt -l)"; \
 	if [ -n "$$unformatted" ]; then \
 		echo "Run 'make fmt' to format files:"; \
 		echo "$$unformatted"; \

@@ -222,10 +222,106 @@ func TestTheCdBuiltinHomeDirectory(t *testing.T) {
 	)
 }
 
+func TestSingleQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo 'shell hello'\n",
+			"echo 'world     test'\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"shell hello\n",
+			"$ ",
+			"world     test\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestDoubleQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo \"quz  hello\"  \"bar\"\n",
+			"echo \"bar\"  \"shell's\"  \"foo\"\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"quz  hello bar\n",
+			"$ ",
+			"bar shell's foo\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestBackslashOutsideQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo multiple\\ \\ \\ \\ spaces\n",
+			"echo \\'\\\"literal quotes\\\"\\'\n",
+			"echo ignore\\_backslash\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"multiple    spaces\n",
+			"$ ",
+			"'\"literal quotes\"'\n",
+			"$ ",
+			"ignore_backslash\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestBackslashWithinSingleQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo 'multiple\\\\slashes'\n",
+			"echo 'every\\\"thing_is\\\"literal'\n",
+			"echo /tmp/dog/'no slash 25' /tmp/dog/'one slash \\23' /tmp/dog/'two slashes \\6\\'\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"multiple\\\\slashes\n",
+			"$ ",
+			"every\\\"thing_is\\\"literal\n",
+			"$ ",
+			"/tmp/dog/no slash 25 /tmp/dog/one slash \\23 /tmp/dog/two slashes \\6\\\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestBackslashWithinDoubleQuotes(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo \"just'one'\\\\n'backslash\"\n",
+			"echo \"inside\\\"literal_quote.\"outside\"\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"just'one'\\n'backslash\n",
+			"$ ",
+			"inside\"literal_quote.outside\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
 	var out bytes.Buffer
-	myShell := NewShell(&out, opts...)
-	err := myShell.Repl(strings.NewReader(input))
+	myShell := NewShell(strings.NewReader(input), &out, opts...)
+	err := myShell.Repl()
 	if err != nil {
 		t.Fatalf("Repl() error = %v, want nil", err)
 	}

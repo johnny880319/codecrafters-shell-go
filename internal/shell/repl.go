@@ -1,25 +1,45 @@
 package shell
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
+	"sync"
+
+	"github.com/chzyer/readline"
 )
 
 const prompt = "$ "
 
+var readlineInitMutex sync.Mutex
+
 // Shell represents the core state of the interactive shell.
 type Shell struct {
-	out            io.Writer
-	sysPath        string
 	workingDir     string
-	commandFuncMap map[string]func(args []string) error
+	commandFuncMap map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
+	stream         shellStream
+	env            shellEnv
+	history        shellHistory
+}
+
+type shellStream struct {
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+}
+
+type shellEnv struct {
+	path     string
+	histfile string
+}
+
+type shellHistory struct {
+	lines      []string
+	startLine  int
+	appendLine int
 }
 
 // Option defines a functional parameter for configuring a Shell instance.
@@ -27,7 +47,7 @@ type Option func(*Shell)
 
 // WithSysPath overrides the default system PATH used by the Shell.
 func WithSysPath(p string) Option {
-	return func(s *Shell) { s.sysPath = p }
+	return func(s *Shell) { s.env.path = p }
 }
 
 // WithWorkingDir overrides the default initial working directory for the Shell.
@@ -36,15 +56,15 @@ func WithWorkingDir(d string) Option {
 }
 
 // NewShell creates a new Shell instance with default OS environment variables.
-func NewShell(out io.Writer, opts ...Option) *Shell {
+func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 	wd, err := os.Getwd()
 	if err != nil {
 		wd = "/"
 	}
 
 	s := &Shell{
-		out:        out,
-		sysPath:    os.Getenv("PATH"),
+		stream:     shellStream{stdin: in, stdout: out, stderr: out},
+		env:        shellEnv{path: os.Getenv("PATH"), histfile: os.Getenv("HISTFILE")},
 		workingDir: wd,
 	}
 
@@ -52,161 +72,165 @@ func NewShell(out io.Writer, opts ...Option) *Shell {
 		opt(s)
 	}
 
-	s.commandFuncMap = map[string]func([]string) error{
-		"exit": s.cmdExit,
-		"echo": s.cmdEcho,
-		"type": s.cmdType,
-		"pwd":  s.cmdPwd,
-		"cd":   s.cmdCd,
+	s.commandFuncMap = s.getCommandFuncMap()
+	if err := s.readHistoryFromFile(s.env.histfile, s.stream.stderr); err != nil {
+		_, _ = fmt.Fprintf(s.stream.stderr, "read history from file error: %v\n", err)
 	}
+	s.history.startLine = len(s.history.lines)
+	s.history.appendLine = len(s.history.lines)
 
 	return s
 }
 
 // Repl starts a read-eval-print loop that reads commands from in, executes them, and writes output to out.
-func (s *Shell) Repl(in io.Reader) error {
-	scanner := bufio.NewScanner(in)
+func (s *Shell) Repl() error {
+	readlineInitMutex.Lock()
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          prompt,
+		AutoComplete:    &customCompleter{shell: s, tabCount: 0},
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+		Stdin:           io.NopCloser(s.stream.stdin),
+		Stdout:          s.stream.stdout,
+		Stderr:          s.stream.stderr,
+	})
+	readlineInitMutex.Unlock()
+
+	if err != nil {
+		return fmt.Errorf("failed to initialize readline: %w", err)
+	}
+	defer func() {
+		_ = rl.Close()
+	}()
+
 	for {
-		if err := s.runOnce(scanner); err != nil {
+		if _, err := fmt.Fprint(s.stream.stdout, prompt); err != nil {
+			return fmt.Errorf("write prompt: %w", err)
+		}
+		input, err := rl.Readline()
+		if err != nil {
+			if errors.Is(err, readline.ErrInterrupt) {
+				continue
+			}
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			return fmt.Errorf("shell session ended with error: %w", err)
+			return fmt.Errorf("read line error: %w", err)
+		}
+
+		if err := s.execute(input); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 		}
 	}
 }
 
-func (s *Shell) runOnce(scanner *bufio.Scanner) error {
-	if _, err := fmt.Fprint(s.out, prompt); err != nil {
-		return fmt.Errorf("write prompt: %w", err)
-	}
+//nolint:gocognit // Will be refactored in a future exercise
+func (s *Shell) execute(input string) error {
+	s.history.lines = append(s.history.lines, input)
+	splitedInput := handleQuotesAndEscapes(input)
+	pipelineStr := splitPipeline(splitedInput)
+	var wg sync.WaitGroup
 
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return fmt.Errorf("read command: %w", err)
+	prevReader := s.stream.stdin
+	for i, cmdStr := range pipelineStr {
+		command, args := cmdStr[0], cmdStr[1:]
+
+		if command == "" {
+			continue
 		}
-		return io.EOF
-	}
 
-	input := scanner.Text()
-	command, args := parseCommand(input)
+		cmdStdin := prevReader
+		cmdStdout := s.stream.stdout
+		cmdStderr := s.stream.stderr
 
-	if command == "" {
-		return nil
-	}
+		var currentPipeWriter io.Closer
+		if i < len(pipelineStr)-1 {
+			pr, pw := io.Pipe()
+			cmdStdout = pw
+			prevReader = pr
+			currentPipeWriter = pw
+		}
 
-	if commandFunc, ok := s.commandFuncMap[command]; ok {
-		return commandFunc(args)
-	}
-
-	if path, found := s.findExecutable(command); found {
-		//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
-		cmd := exec.CommandContext(context.Background(), path, args...)
-		cmd.Args[0] = command
-		cmd.Dir = s.workingDir
-		cmd.Stdout = s.out
-		cmd.Stderr = s.out
-		_ = cmd.Run()
-		return nil
-	}
-	//nolint:gosec // Printing dynamic user input is the intended behavior of a shell
-	if _, err := fmt.Fprintf(s.out, "%s: command not found\n", input); err != nil {
-		return fmt.Errorf("write command output: %w", err)
-	}
-
-	return nil
-}
-
-func parseCommand(input string) (command string, args []string) {
-	fields := strings.Fields(input)
-	if len(fields) == 0 {
-		return "", nil
-	}
-	return fields[0], fields[1:]
-}
-
-func (s *Shell) cmdExit(_ []string) error {
-	return io.EOF
-}
-
-func (s *Shell) cmdEcho(args []string) error {
-	_, err := fmt.Fprintln(s.out, strings.Join(args, " "))
-	return err
-}
-
-func (s *Shell) cmdType(args []string) error {
-	for _, arg := range args {
-		if _, ok := s.commandFuncMap[arg]; ok {
-			if _, err := fmt.Fprintf(s.out, "%s is a shell builtin\n", arg); err != nil {
-				return err
+		args, closer, err := handleRedirect(args, &cmdStdout, &cmdStderr)
+		if closer != nil {
+			defer func(c io.Closer) {
+				_ = c.Close()
+			}(closer)
+		}
+		if err != nil {
+			_, _ = fmt.Fprintln(s.stream.stderr, err)
+			if currentPipeWriter != nil {
+				_ = currentPipeWriter.Close()
 			}
-		} else if path, found := s.findExecutable(arg); found {
-			//nolint:gosec // Printing dynamic user input is the intended behavior of a shell
-			if _, err := fmt.Fprintf(s.out, "%s is %s\n", arg, path); err != nil {
-				return err
+			continue
+		}
+
+		if commandFunc, ok := s.commandFuncMap[command]; ok {
+			if command == "cd" || command == "exit" {
+				err = commandFunc(args, cmdStdin, cmdStdout, cmdStderr)
+				if errors.Is(err, io.EOF) {
+					return io.EOF
+				}
+				if currentPipeWriter != nil {
+					_ = currentPipeWriter.Close()
+				}
+				continue
 			}
+			wg.Add(1)
+			go func(in io.Reader, stdout io.Writer, stderr io.Writer, pw io.Closer) {
+				defer wg.Done()
+				_ = commandFunc(args, in, stdout, stderr)
+				if pw != nil {
+					_ = pw.Close()
+				}
+				if closer, ok := in.(io.ReadCloser); ok && in != s.stream.stdin {
+					_ = closer.Close()
+				}
+			}(cmdStdin, cmdStdout, cmdStderr, currentPipeWriter)
+
+			continue
+		}
+
+		if path, found := s.findExecutable(command); found {
+			//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
+			cmd := exec.CommandContext(context.Background(), path, args...)
+			cmd.Args[0] = command
+			cmd.Dir = s.workingDir
+			cmd.Stdin = cmdStdin
+			cmd.Stdout = cmdStdout
+			cmd.Stderr = cmdStderr
+
+			if err := cmd.Start(); err != nil {
+				_, _ = fmt.Fprintf(s.stream.stderr, "failed to start %s: %v\n", cmd.Args[0], err)
+				if currentPipeWriter != nil {
+					_ = currentPipeWriter.Close()
+				}
+				continue
+			}
+
+			wg.Add(1)
+			go func(c *exec.Cmd, pw io.Closer) {
+				defer wg.Done()
+				_ = c.Wait()
+				if pw != nil {
+					_ = pw.Close()
+				}
+				if closer, ok := c.Stdin.(io.ReadCloser); ok && c.Stdin != s.stream.stdin {
+					_ = closer.Close()
+				}
+			}(cmd, currentPipeWriter)
 		} else {
-			if _, err := fmt.Fprintf(s.out, "%s: not found\n", arg); err != nil {
-				return err
+			if _, err := fmt.Fprintf(s.stream.stdout, "%s: command not found\n", command); err != nil {
+				if currentPipeWriter != nil {
+					_ = currentPipeWriter.Close()
+				}
+				return fmt.Errorf("write command output: %w", err)
 			}
 		}
 	}
+
+	wg.Wait()
 	return nil
-}
-
-func (s *Shell) cmdPwd(_ []string) error {
-	//nolint:gosec // Printing working directory is the intended behavior of a shell
-	_, err := fmt.Fprintln(s.out, s.workingDir)
-	return err
-}
-
-func (s *Shell) cmdCd(args []string) error {
-	if len(args) == 0 {
-		s.workingDir = os.Getenv("HOME")
-		return nil
-	}
-	if len(args) > 1 {
-		_, err := fmt.Fprintln(s.out, "cd: too many arguments")
-		return err
-	}
-
-	newPath := args[0]
-	if filepath.IsAbs(newPath) {
-		return s.checkDirectory(newPath)
-	}
-
-	if strings.HasPrefix(newPath, "~") {
-		s.workingDir = os.Getenv("HOME")
-		newPath = newPath[1:]
-	}
-	absPath := filepath.Join(s.workingDir, newPath)
-	return s.checkDirectory(absPath)
-}
-
-func (s *Shell) checkDirectory(path string) error {
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		_, printfErr := fmt.Fprintf(s.out, "cd: %s: No such file or directory\n", path)
-		return printfErr
-	}
-	if err != nil {
-		return fmt.Errorf("check directory: %w", err)
-	}
-	if !info.IsDir() {
-		_, printfErr := fmt.Fprintf(s.out, "cd: %s: Not a directory\n", path)
-		return printfErr
-	}
-	s.workingDir = path
-	return nil
-}
-
-func (s *Shell) findExecutable(command string) (string, bool) {
-	paths := filepath.SplitList(s.sysPath)
-	for _, dir := range paths {
-		fullPath := filepath.Join(dir, command)
-		if _, err := exec.LookPath(fullPath); err == nil {
-			return fullPath, true
-		}
-	}
-	return "", false
 }

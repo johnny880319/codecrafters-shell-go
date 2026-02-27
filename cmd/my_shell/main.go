@@ -8,8 +8,8 @@ import (
 )
 
 func main() {
-	myShell := shell.NewShell(os.Stdout)
-	err := myShell.Repl(os.Stdin)
+	myShell := shell.NewShell(os.Stdin, os.Stdout)
+	err := myShell.Repl()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "shell error: %v\n", err)
 		os.Exit(1)

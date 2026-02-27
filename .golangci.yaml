@@ -71,11 +71,14 @@ linters:
         - name: unused-parameter
 
   exclusions:
+    paths:
+      - .cache
     rules:
       - path: _test\.go
         linters:
           - dupl
           - gosec
+
 
 formatters:
   enable:
