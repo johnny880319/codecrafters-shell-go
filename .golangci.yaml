@@ -71,11 +71,14 @@ linters:
         - name: unused-parameter
 
   exclusions:
+    paths:
+      - .cache
     rules:
       - path: _test\.go
         linters:
           - dupl
           - gosec
+
 
 formatters:
   enable:
@@ -84,5 +87,3 @@ formatters:
 issues:
   max-same-issues: 0
   max-issues-per-linter: 0
-  exclude-dirs:
-    - .cache
