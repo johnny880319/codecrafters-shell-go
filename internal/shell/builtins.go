@@ -211,6 +211,9 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 func (s *Shell) readHistoryFromFile(filepath string, stderr io.Writer) error {
 	//nolint:gosec // A shell's intended behavior is to open files specified by the user
 	file, err := os.Open(filepath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("open history file: %w", err)
 	}
