@@ -1,6 +1,8 @@
 package shell
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -93,7 +95,36 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 	return nil
 }
 
+//nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
+	if args[0] == "-r" {
+		historyFilePath := filepath.Join(s.workingDir, args[1])
+		//nolint:gosec // A shell's intended behavior is to open files specified by the user
+		file, err := os.Open(historyFilePath)
+		if err != nil {
+			return fmt.Errorf("open history file: %w", err)
+		}
+		defer func() {
+			if err := file.Close(); err != nil {
+				if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
+					return
+				}
+			}
+		}()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+			s.history = append(s.history, line)
+		}
+		if err := scanner.Err(); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				_, printfErr := fmt.Fprintf(stderr, "history: %s: No such file or directory\n", args[1])
+				return printfErr
+			}
+		}
+	}
+
 	start := 1
 
 	if len(args) > 0 {
