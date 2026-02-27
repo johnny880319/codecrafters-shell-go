@@ -14,6 +14,8 @@ type customCompleter struct {
 }
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
+//
+//nolint:gocognit // Will be refactored in a future exercise
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	lineStr := string(line[:pos])
 	matches := c.getMatchStrings(lineStr)
@@ -28,6 +30,9 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	if len(matches) == 1 {
 		c.tabCount = 0
+		if matches[0][len(matches[0])-1] == '/' {
+			return [][]rune{[]rune(matches[0])}, len(lineStr)
+		}
 		return [][]rune{[]rune(matches[0] + " ")}, len(lineStr)
 	}
 
@@ -142,23 +147,37 @@ func (c *customCompleter) findPrefixExecutables(prefix string) []string {
 }
 
 func (c *customCompleter) findPrefixPaths(prefix string) []string {
-	hasTilde := false
+	lastSlash := strings.LastIndex(prefix, "/")
+	var prefixDir string
+	if lastSlash == -1 {
+		prefixDir = ""
+	} else {
+		prefixDir = prefix[:lastSlash+1]
+	}
 	workingDir := c.shell.workingDir
+
 	if strings.HasPrefix(prefix, "/") {
-		workingDir = ""
+		workingDir = "/"
+		prefix = prefix[1:]
 	}
 	if strings.HasPrefix(prefix, "~") {
 		workingDir = os.Getenv("HOME")
-		hasTilde = true
 		prefix = prefix[1:]
 	}
 
-	prefixDir := filepath.Dir(prefix)
-	absPathPrefix := filepath.Join(workingDir, prefix)
-	dir := filepath.Dir(absPathPrefix)
-	basePrefix := filepath.Base(absPathPrefix)
+	absPrefix := workingDir + "/" + prefix
+	lastSlash = strings.LastIndex(absPrefix, "/")
+	var absDir string
+	var basePrefix string
+	if lastSlash == -1 {
+		absDir = ""
+		basePrefix = absPrefix
+	} else {
+		absDir = absPrefix[:lastSlash+1]
+		basePrefix = absPrefix[lastSlash+1:]
+	}
 
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(absDir)
 	if err != nil {
 		return nil
 	}
@@ -172,10 +191,7 @@ func (c *customCompleter) findPrefixPaths(prefix string) []string {
 		if entry.IsDir() {
 			match += string(os.PathSeparator)
 		}
-		if hasTilde {
-			match = "~" + match
-		}
-		matches = append(matches, prefixDir+"/"+match)
+		matches = append(matches, prefixDir+match)
 	}
 	return matches
 }
