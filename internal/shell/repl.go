@@ -18,13 +18,14 @@ var readlineInitMutex sync.Mutex
 
 // Shell represents the core state of the interactive shell.
 type Shell struct {
-	stdin          io.Reader
-	stdout         io.Writer
-	stderr         io.Writer
-	sysPath        string
-	workingDir     string
-	commandFuncMap map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
-	history        []string
+	stdin              io.Reader
+	stdout             io.Writer
+	stderr             io.Writer
+	sysPath            string
+	workingDir         string
+	commandFuncMap     map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
+	history            []string
+	historyAppendCount int
 }
 
 // Option defines a functional parameter for configuring a Shell instance.
@@ -110,6 +111,7 @@ func (s *Shell) Repl() error {
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	s.history = append(s.history, input)
+	s.historyAppendCount++
 	splitedInput := handleQuotesAndEscapes(input)
 	pipelineStr := splitPipeline(splitedInput)
 	var wg sync.WaitGroup

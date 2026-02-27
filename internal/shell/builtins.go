@@ -171,7 +171,7 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 		}()
 
 		writer := bufio.NewWriter(file)
-		for _, cmd := range s.history {
+		for _, cmd := range s.history[len(s.history)-s.historyAppendCount:] {
 			if _, err := writer.WriteString(cmd + "\n"); err != nil {
 				return fmt.Errorf("write history to file: %w", err)
 			}
@@ -179,6 +179,7 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 		if err := writer.Flush(); err != nil {
 			return fmt.Errorf("flush history to file: %w", err)
 		}
+		s.historyAppendCount = 0
 		return nil
 	}
 
