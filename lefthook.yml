@@ -1,0 +1,23 @@
+# NOTE:
+# These hooks assume a monorepo layout with `python-codebase/`, `go-codebase/`, `rust-codebase/`, and `typescript-codebase/` folders.
+# If you rename folders, update each `root:` path below.
+# If you flatten language code to repository root, remove the `root:` field entirely (setting `root: "./"` will NOT work).
+
+pre-commit:
+  parallel: true
+  commands:
+    # go
+    go-lint-typecheck:
+      glob: "**/*.go"
+      run: golangci-lint run --fix
+      stage_fixed: true
+
+
+pre-push:
+  parallel: true
+  commands:
+    # go
+    go-test:
+      glob: "**/*.go"
+      run: go test -short ./...
+
