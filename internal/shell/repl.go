@@ -1,3 +1,4 @@
+// Package shell implements a simple interactive shell.
 package shell
 
 import (
@@ -125,6 +126,23 @@ func (s *Shell) Repl() error {
 		}
 	}
 }
+
+// type commandLine struct {
+// 	pipeline   []commandSegment
+// 	background bool
+// }
+
+// type commandSegment struct {
+// 	command   string
+// 	args      []string
+// 	redirects []redirect
+// }
+
+// type redirect struct {
+// 	fd     int
+// 	append bool
+// 	path   string
+// }
 
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {

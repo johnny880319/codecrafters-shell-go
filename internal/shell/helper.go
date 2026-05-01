@@ -83,7 +83,7 @@ func (s *Shell) findExecutable(command string) (string, bool) {
 }
 
 func handleRedirect(args []string, currStdout *io.Writer, currStderr *io.Writer) ([]string, io.Closer, error) {
-	redirect_map := map[string]struct {
+	redirectMap := map[string]struct {
 		flag   int
 		writer *io.Writer
 	}{
@@ -95,7 +95,7 @@ func handleRedirect(args []string, currStdout *io.Writer, currStderr *io.Writer)
 		"2>>": {os.O_APPEND, currStderr},
 	}
 	for i, arg := range args {
-		if redirect, ok := redirect_map[arg]; ok && i < len(args)-1 {
+		if redirect, ok := redirectMap[arg]; ok && i < len(args)-1 {
 			filename := args[i+1]
 			//nolint:gosec // Opening files based on user input is the intended behavior of a shell
 			file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|redirect.flag, 0o644)

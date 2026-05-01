@@ -1,3 +1,4 @@
+// Entry point for the shell application.
 package main
 
 import (

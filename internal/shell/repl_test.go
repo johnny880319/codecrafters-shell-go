@@ -3,6 +3,7 @@ package shell
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -313,6 +314,30 @@ func TestBackslashWithinDoubleQuotes(t *testing.T) {
 			"just'one'\\n'backslash\n",
 			"$ ",
 			"inside\"literal_quote.outside\n",
+			"$ ",
+		}, ""),
+	)
+}
+
+func TestRedirection(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	stdoutPath := filepath.Join(tmpDir, "stdout.txt")
+
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"echo \"hi stdout\" > " + stdoutPath + "\n",
+			"echo \"bye stderr\" 2>> " + stdoutPath + "\n",
+			"cat " + stdoutPath + "\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+			"bye stderr\n",
+			"$ ",
+			"hi stdout\n",
 			"$ ",
 		}, ""),
 	)
