@@ -127,7 +127,6 @@ func (s *Shell) Repl() error {
 	}
 }
 
-//nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	s.history.lines = append(s.history.lines, input)
 	cmdline, err := parseInput(input)
@@ -179,53 +178,63 @@ func (s *Shell) execute(input string) error {
 			}
 		}
 
-		if bc, ok := s.builtinCommandMap[pl.command]; ok {
-			if !bc.isAsync {
-				err = bc.fn(pl.args, cmdStream)
-				closeAll(closers)
-				if errors.Is(err, io.EOF) {
-					return io.EOF
-				}
-				continue
-			}
-			wg.Add(1)
-			go func(args []string, cmdStream shellStream, closers []io.Closer) {
-				defer closeAll(closers)
-				defer wg.Done()
-				_ = bc.fn(args, cmdStream)
-			}(pl.args, cmdStream, closers)
-
-			continue
+		if err := s.executeCommandSegment(pl, cmdStream, closers, &wg); err != nil {
+			return err
 		}
-
-		path, found := s.findExecutable(pl.command)
-		if !found {
-			_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", pl.command)
-			closeAll(closers)
-			return nil
-		}
-		//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
-		cmd := exec.CommandContext(context.Background(), path, pl.args...)
-		cmd.Args[0] = pl.command
-		cmd.Dir = s.workingDir
-		cmd.Stdin = cmdStream.stdin
-		cmd.Stdout = cmdStream.stdout
-		cmd.Stderr = cmdStream.stderr
-
-		if err := cmd.Start(); err != nil {
-			closeAll(closers)
-			return fmt.Errorf("failed to start command: %w", err)
-		}
-
-		wg.Add(1)
-		go func(c *exec.Cmd, closers []io.Closer) {
-			defer closeAll(closers)
-			defer wg.Done()
-			_ = c.Wait()
-		}(cmd, closers)
 	}
 
 	wg.Wait()
+	return nil
+}
+
+func (s *Shell) executeCommandSegment(
+	segment commandSegment,
+	cmdStream shellStream,
+	closers []io.Closer,
+	wg *sync.WaitGroup,
+) error {
+	if bc, ok := s.builtinCommandMap[segment.command]; ok {
+		if !bc.isAsync {
+			err := bc.fn(segment.args, cmdStream)
+			closeAll(closers)
+			return err
+		}
+
+		wg.Add(1)
+		go func(args []string, cmdStream shellStream, closers []io.Closer) {
+			defer closeAll(closers)
+			defer wg.Done()
+			_ = bc.fn(args, cmdStream)
+		}(segment.args, cmdStream, closers)
+
+		return nil
+	}
+
+	path, found := s.findExecutable(segment.command)
+	if !found {
+		_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", segment.command)
+		closeAll(closers)
+		return nil
+	}
+	//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
+	cmd := exec.CommandContext(context.Background(), path, segment.args...)
+	cmd.Args[0] = segment.command
+	cmd.Dir = s.workingDir
+	cmd.Stdin = cmdStream.stdin
+	cmd.Stdout = cmdStream.stdout
+	cmd.Stderr = cmdStream.stderr
+
+	if err := cmd.Start(); err != nil {
+		closeAll(closers)
+		return fmt.Errorf("failed to start command: %w", err)
+	}
+
+	wg.Add(1)
+	go func(c *exec.Cmd, closers []io.Closer) {
+		defer closeAll(closers)
+		defer wg.Done()
+		_ = c.Wait()
+	}(cmd, closers)
 	return nil
 }
 
