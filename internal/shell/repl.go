@@ -25,7 +25,7 @@ type Shell struct {
 	stream            shellStream
 	env               shellEnv
 	history           shellHistory
-	jobs              map[int]job
+	jobs              []job
 }
 
 type shellStream struct {
@@ -69,7 +69,7 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		stream:     shellStream{stdin: in, stdout: out, stderr: out},
 		env:        shellEnv{path: os.Getenv("PATH"), histfile: os.Getenv("HISTFILE")},
 		workingDir: wd,
-		jobs:       make(map[int]job),
+		jobs:       []job{},
 	}
 
 	for _, opt := range opts {
@@ -139,7 +139,7 @@ func (s *Shell) execute(input string) error {
 
 	var wg sync.WaitGroup
 
-	pid := 0
+	var currentJob job
 	prevReader := s.stream.stdin
 	for i, pl := range cmdline.pipeline {
 		var (
@@ -159,14 +159,14 @@ func (s *Shell) execute(input string) error {
 			}
 			continue
 		}
-		pid, err = s.startExternalCommand(pl, cmdStream, closers, &wg)
+		currentJob, err = s.startExternalCommand(pl, cmdStream, closers, &wg)
 		if err != nil {
 			return err
 		}
 	}
 
 	if cmdline.isBackground {
-		_, _ = fmt.Fprintf(s.stream.stdout, "[%d] %d\n", s.jobs[pid].id, pid)
+		_, _ = fmt.Fprintf(s.stream.stdout, "[%d] %d\n", currentJob.id, currentJob.pid)
 	} else {
 		wg.Wait()
 	}
@@ -248,12 +248,12 @@ func (s *Shell) startExternalCommand(
 	cmdStream shellStream,
 	closers []io.Closer,
 	wg *sync.WaitGroup,
-) (int, error) {
+) (job, error) {
 	path, found := s.findExecutable(segment.command)
 	if !found {
 		_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", segment.command)
 		closeAll(closers)
-		return 0, nil
+		return job{}, nil
 	}
 	//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
 	cmd := exec.CommandContext(context.Background(), path, segment.args...)
@@ -265,16 +265,16 @@ func (s *Shell) startExternalCommand(
 
 	if err := cmd.Start(); err != nil {
 		closeAll(closers)
-		return 0, fmt.Errorf("failed to start command: %w", err)
+		return job{}, fmt.Errorf("failed to start command: %w", err)
 	}
 
-	pid := cmd.Process.Pid
-	s.jobs[pid] = job{
+	currentJob := job{
 		id:      len(s.jobs) + 1,
-		pid:     pid,
+		pid:     cmd.Process.Pid,
 		command: segment.command + " " + strings.Join(segment.args, " "),
 		status:  "Running",
 	}
+	s.jobs = append(s.jobs, currentJob)
 
 	wg.Add(1)
 	go func(c *exec.Cmd, closers []io.Closer) {
@@ -283,7 +283,7 @@ func (s *Shell) startExternalCommand(
 		_ = c.Wait()
 	}(cmd, closers)
 
-	return pid, nil
+	return currentJob, nil
 }
 
 func closeAll(closers []io.Closer) {

@@ -206,10 +206,18 @@ type job struct {
 
 func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
 	for _, job := range s.jobs {
+		indicator := " "
+		if job.id == len(s.jobs) {
+			indicator = "+"
+		}
+		if job.id == len(s.jobs)-1 {
+			indicator = "-"
+		}
 		_, _ = fmt.Fprintf(
 			s.stream.stdout,
-			"[%d]+  %-24s %s\n",
+			"[%d]%s  %-24s %s\n",
 			job.id,
+			indicator,
 			job.status,
 			job.command,
 		)
