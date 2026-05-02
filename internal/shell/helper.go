@@ -2,7 +2,6 @@ package shell
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,29 +81,34 @@ func (s *Shell) findExecutable(command string) (string, bool) {
 	return "", false
 }
 
-func handleRedirect(args []string, currStdout *io.Writer, currStderr *io.Writer) ([]string, io.Closer, error) {
+type redirect struct {
+	fd         int
+	appendFlag int
+	file       string // currently only supports file path.
+}
+
+func parseRedirect(args []string) ([]string, []redirect, error) {
 	redirectMap := map[string]struct {
-		flag   int
-		writer *io.Writer
+		fd         int
+		appendFlag int
 	}{
-		">":   {os.O_TRUNC, currStdout},
-		"1>":  {os.O_TRUNC, currStdout},
-		"2>":  {os.O_TRUNC, currStderr},
-		">>":  {os.O_APPEND, currStdout},
-		"1>>": {os.O_APPEND, currStdout},
-		"2>>": {os.O_APPEND, currStderr},
+		">":   {1, os.O_TRUNC},
+		"1>":  {1, os.O_TRUNC},
+		"2>":  {2, os.O_TRUNC},
+		">>":  {1, os.O_APPEND},
+		"1>>": {1, os.O_APPEND},
+		"2>>": {2, os.O_APPEND},
 	}
 	for i, arg := range args {
-		if redirect, ok := redirectMap[arg]; ok && i < len(args)-1 {
-			filename := args[i+1]
-			//nolint:gosec // Opening files based on user input is the intended behavior of a shell
-			file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|redirect.flag, 0o644)
-			if err != nil {
-				return nil, nil, fmt.Errorf("%s: %s", filename, err.Error())
-			}
-			*redirect.writer = file
-			return append(args[:i], args[i+2:]...), file, nil
+		r, ok := redirectMap[arg]
+		if !ok {
+			continue
 		}
+		if i+1 >= len(args) {
+			return nil, nil, fmt.Errorf("syntax error near unexpected token `%s'", arg)
+		}
+
+		return append(args[:i], args[i+2:]...), []redirect{{fd: r.fd, appendFlag: r.appendFlag, file: args[i+1]}}, nil
 	}
 	return args, nil, nil
 }

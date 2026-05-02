@@ -127,123 +127,106 @@ func (s *Shell) Repl() error {
 	}
 }
 
-// type commandLine struct {
-// 	pipeline   []commandSegment
-// 	background bool
-// }
-
-// type commandSegment struct {
-// 	command   string
-// 	args      []string
-// 	redirects []redirect
-// }
-
-// type redirect struct {
-// 	fd     int
-// 	append bool
-// 	path   string
-// }
+type ioFlow struct {
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+}
 
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	s.history.lines = append(s.history.lines, input)
-	splitedInput := handleQuotesAndEscapes(input)
-	pipelineStr := splitPipeline(splitedInput)
+	cmdline, err := parseInput(input)
+	if err != nil {
+		return err
+	}
+
 	var wg sync.WaitGroup
 
 	prevReader := s.stream.stdin
-	for i, cmdStr := range pipelineStr {
-		command, args := cmdStr[0], cmdStr[1:]
-
-		if command == "" {
-			continue
+	for i, pl := range cmdline.pipeline {
+		var closers []io.Closer
+		cmdIO := ioFlow{
+			stdin:  prevReader,
+			stdout: s.stream.stdout,
+			stderr: s.stream.stderr,
 		}
 
-		cmdStdin := prevReader
-		cmdStdout := s.stream.stdout
-		cmdStderr := s.stream.stderr
-
-		var currentPipeWriter io.Closer
-		if i < len(pipelineStr)-1 {
-			pr, pw := io.Pipe()
-			cmdStdout = pw
-			prevReader = pr
-			currentPipeWriter = pw
-		}
-
-		args, closer, err := handleRedirect(args, &cmdStdout, &cmdStderr)
-		if closer != nil {
-			defer func(c io.Closer) {
-				_ = c.Close()
-			}(closer)
-		}
-		if err != nil {
-			_, _ = fmt.Fprintln(s.stream.stderr, err)
-			if currentPipeWriter != nil {
-				_ = currentPipeWriter.Close()
+		if i > 0 {
+			closer, ok := prevReader.(io.Closer)
+			if !ok {
+				return fmt.Errorf("previous reader is not closable")
 			}
-			continue
+			closers = append(closers, closer)
+		}
+		if i < len(cmdline.pipeline)-1 {
+			pr, pw := io.Pipe()
+			cmdIO.stdout = pw
+			prevReader = pr // used for the next round of loop
+			closers = append(closers, pw)
 		}
 
-		if commandFunc, ok := s.commandFuncMap[command]; ok {
-			if command == "cd" || command == "exit" {
-				err = commandFunc(args, cmdStdin, cmdStdout, cmdStderr)
+		for _, redirect := range pl.redirects {
+			//nolint:gosec // Opening files based on user input is the intended behavior of a shell
+			file, err := os.OpenFile(redirect.file, os.O_CREATE|os.O_WRONLY|redirect.appendFlag, 0o644)
+			if err != nil {
+				closeAll(closers)
+				return fmt.Errorf("%s: %s", redirect.file, err.Error())
+			}
+			closers = append(closers, file)
+			switch redirect.fd {
+			case 1:
+				cmdIO.stdout = file
+			case 2:
+				cmdIO.stderr = file
+			default:
+				closeAll(closers)
+				return fmt.Errorf("unsupported redirect fd: %d", redirect.fd)
+			}
+		}
+
+		if commandFunc, ok := s.commandFuncMap[pl.command]; ok {
+			if pl.command == "cd" || pl.command == "exit" {
+				err = commandFunc(pl.args, cmdIO.stdin, cmdIO.stdout, cmdIO.stderr)
+				closeAll(closers)
 				if errors.Is(err, io.EOF) {
 					return io.EOF
 				}
-				if currentPipeWriter != nil {
-					_ = currentPipeWriter.Close()
-				}
 				continue
 			}
 			wg.Add(1)
-			go func(in io.Reader, stdout io.Writer, stderr io.Writer, pw io.Closer) {
+			go func(args []string, cmdIO ioFlow, closers []io.Closer) {
+				defer closeAll(closers)
 				defer wg.Done()
-				_ = commandFunc(args, in, stdout, stderr)
-				if pw != nil {
-					_ = pw.Close()
-				}
-				if closer, ok := in.(io.ReadCloser); ok && in != s.stream.stdin {
-					_ = closer.Close()
-				}
-			}(cmdStdin, cmdStdout, cmdStderr, currentPipeWriter)
+				_ = commandFunc(args, cmdIO.stdin, cmdIO.stdout, cmdIO.stderr)
+			}(pl.args, cmdIO, closers)
 
 			continue
 		}
 
-		if path, found := s.findExecutable(command); found {
+		if path, found := s.findExecutable(pl.command); found {
 			//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
-			cmd := exec.CommandContext(context.Background(), path, args...)
-			cmd.Args[0] = command
+			cmd := exec.CommandContext(context.Background(), path, pl.args...)
+			cmd.Args[0] = pl.command
 			cmd.Dir = s.workingDir
-			cmd.Stdin = cmdStdin
-			cmd.Stdout = cmdStdout
-			cmd.Stderr = cmdStderr
+			cmd.Stdin = cmdIO.stdin
+			cmd.Stdout = cmdIO.stdout
+			cmd.Stderr = cmdIO.stderr
 
 			if err := cmd.Start(); err != nil {
-				_, _ = fmt.Fprintf(s.stream.stderr, "failed to start %s: %v\n", cmd.Args[0], err)
-				if currentPipeWriter != nil {
-					_ = currentPipeWriter.Close()
-				}
-				continue
+				closeAll(closers)
+				return fmt.Errorf("failed to start command: %w", err)
 			}
 
 			wg.Add(1)
-			go func(c *exec.Cmd, pw io.Closer) {
+			go func(c *exec.Cmd, closers []io.Closer) {
 				defer wg.Done()
+				defer closeAll(closers)
 				_ = c.Wait()
-				if pw != nil {
-					_ = pw.Close()
-				}
-				if closer, ok := c.Stdin.(io.ReadCloser); ok && c.Stdin != s.stream.stdin {
-					_ = closer.Close()
-				}
-			}(cmd, currentPipeWriter)
+			}(cmd, closers)
 		} else {
-			if _, err := fmt.Fprintf(s.stream.stdout, "%s: command not found\n", command); err != nil {
-				if currentPipeWriter != nil {
-					_ = currentPipeWriter.Close()
-				}
+			if _, err := fmt.Fprintf(s.stream.stdout, "%s: command not found\n", pl.command); err != nil {
+				closeAll(closers)
 				return fmt.Errorf("write command output: %w", err)
 			}
 		}
@@ -251,4 +234,44 @@ func (s *Shell) execute(input string) error {
 
 	wg.Wait()
 	return nil
+}
+
+func closeAll(closers []io.Closer) {
+	for _, closer := range closers {
+		_ = closer.Close()
+	}
+}
+
+type commandLine struct {
+	pipeline []commandSegment
+}
+
+type commandSegment struct {
+	command   string
+	args      []string
+	redirects []redirect
+}
+
+func parseInput(input string) (commandLine, error) {
+	cl := commandLine{}
+	splitedInput := handleQuotesAndEscapes(input)
+	pipelineStr := splitPipeline(splitedInput)
+
+	for _, cmdStr := range pipelineStr {
+		if len(cmdStr) == 0 {
+			return cl, fmt.Errorf("empty command")
+		}
+		command, args := cmdStr[0], cmdStr[1:]
+
+		args, redirects, err := parseRedirect(args)
+		if err != nil {
+			return cl, err
+		}
+		cl.pipeline = append(cl.pipeline, commandSegment{
+			command:   command,
+			args:      args,
+			redirects: redirects,
+		})
+	}
+	return cl, nil
 }
