@@ -1,3 +1,4 @@
+// Package shell implements a simple interactive shell.
 package shell
 
 import (
@@ -18,11 +19,11 @@ var readlineInitMutex sync.Mutex
 
 // Shell represents the core state of the interactive shell.
 type Shell struct {
-	workingDir     string
-	commandFuncMap map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
-	stream         shellStream
-	env            shellEnv
-	history        shellHistory
+	workingDir        string
+	builtinCommandMap map[string]builtinCommand
+	stream            shellStream
+	env               shellEnv
+	history           shellHistory
 }
 
 type shellStream struct {
@@ -72,8 +73,8 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		opt(s)
 	}
 
-	s.commandFuncMap = s.getCommandFuncMap()
-	if err := s.readHistoryFromFile(s.env.histfile, s.stream.stderr); err != nil {
+	s.builtinCommandMap = s.getCommandFuncMap()
+	if err := s.readHistoryFromFile(s.env.histfile, s.stream); err != nil {
 		_, _ = fmt.Fprintf(s.stream.stderr, "read history from file error: %v\n", err)
 	}
 	s.history.startLine = len(s.history.lines)
@@ -126,111 +127,187 @@ func (s *Shell) Repl() error {
 	}
 }
 
-//nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	s.history.lines = append(s.history.lines, input)
-	splitedInput := handleQuotesAndEscapes(input)
-	pipelineStr := splitPipeline(splitedInput)
+	cmdline, err := parseInput(input)
+	if err != nil {
+		return err
+	}
+
 	var wg sync.WaitGroup
 
 	prevReader := s.stream.stdin
-	for i, cmdStr := range pipelineStr {
-		command, args := cmdStr[0], cmdStr[1:]
-
-		if command == "" {
-			continue
-		}
-
-		cmdStdin := prevReader
-		cmdStdout := s.stream.stdout
-		cmdStderr := s.stream.stderr
-
-		var currentPipeWriter io.Closer
-		if i < len(pipelineStr)-1 {
-			pr, pw := io.Pipe()
-			cmdStdout = pw
-			prevReader = pr
-			currentPipeWriter = pw
-		}
-
-		args, closer, err := handleRedirect(args, &cmdStdout, &cmdStderr)
-		if closer != nil {
-			defer func(c io.Closer) {
-				_ = c.Close()
-			}(closer)
-		}
+	for i, pl := range cmdline.pipeline {
+		var (
+			cmdStream shellStream
+			closers   []io.Closer
+			err       error
+		)
+		cmdStream, closers, prevReader, err = s.handleStream(prevReader, i, cmdline.pipeline)
 		if err != nil {
-			_, _ = fmt.Fprintln(s.stream.stderr, err)
-			if currentPipeWriter != nil {
-				_ = currentPipeWriter.Close()
+			return err
+		}
+
+		if bc, ok := s.builtinCommandMap[pl.command]; ok {
+			err := startBuiltinCommand(bc, pl, cmdStream, closers, &wg)
+			if err != nil {
+				return err
 			}
 			continue
 		}
-
-		if commandFunc, ok := s.commandFuncMap[command]; ok {
-			if command == "cd" || command == "exit" {
-				err = commandFunc(args, cmdStdin, cmdStdout, cmdStderr)
-				if errors.Is(err, io.EOF) {
-					return io.EOF
-				}
-				if currentPipeWriter != nil {
-					_ = currentPipeWriter.Close()
-				}
-				continue
-			}
-			wg.Add(1)
-			go func(in io.Reader, stdout io.Writer, stderr io.Writer, pw io.Closer) {
-				defer wg.Done()
-				_ = commandFunc(args, in, stdout, stderr)
-				if pw != nil {
-					_ = pw.Close()
-				}
-				if closer, ok := in.(io.ReadCloser); ok && in != s.stream.stdin {
-					_ = closer.Close()
-				}
-			}(cmdStdin, cmdStdout, cmdStderr, currentPipeWriter)
-
-			continue
-		}
-
-		if path, found := s.findExecutable(command); found {
-			//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
-			cmd := exec.CommandContext(context.Background(), path, args...)
-			cmd.Args[0] = command
-			cmd.Dir = s.workingDir
-			cmd.Stdin = cmdStdin
-			cmd.Stdout = cmdStdout
-			cmd.Stderr = cmdStderr
-
-			if err := cmd.Start(); err != nil {
-				_, _ = fmt.Fprintf(s.stream.stderr, "failed to start %s: %v\n", cmd.Args[0], err)
-				if currentPipeWriter != nil {
-					_ = currentPipeWriter.Close()
-				}
-				continue
-			}
-
-			wg.Add(1)
-			go func(c *exec.Cmd, pw io.Closer) {
-				defer wg.Done()
-				_ = c.Wait()
-				if pw != nil {
-					_ = pw.Close()
-				}
-				if closer, ok := c.Stdin.(io.ReadCloser); ok && c.Stdin != s.stream.stdin {
-					_ = closer.Close()
-				}
-			}(cmd, currentPipeWriter)
-		} else {
-			if _, err := fmt.Fprintf(s.stream.stdout, "%s: command not found\n", command); err != nil {
-				if currentPipeWriter != nil {
-					_ = currentPipeWriter.Close()
-				}
-				return fmt.Errorf("write command output: %w", err)
-			}
+		err = s.startExternalCommand(pl, cmdStream, closers, &wg)
+		if err != nil {
+			return err
 		}
 	}
 
 	wg.Wait()
 	return nil
+}
+
+func (s *Shell) handleStream(
+	prevReader io.Reader,
+	i int,
+	pipeline []commandSegment,
+) (shellStream, []io.Closer, io.Reader, error) {
+	var closers []io.Closer
+	cmdStream := shellStream{
+		stdin:  prevReader,
+		stdout: s.stream.stdout,
+		stderr: s.stream.stderr,
+	}
+
+	if i > 0 {
+		closer, ok := prevReader.(io.Closer)
+		if !ok {
+			return shellStream{}, nil, nil, fmt.Errorf("previous reader is not closable")
+		}
+		closers = append(closers, closer)
+	}
+	if i < len(pipeline)-1 {
+		pr, pw := io.Pipe()
+		cmdStream.stdout = pw
+		prevReader = pr // used for the next round of loop
+		closers = append(closers, pw)
+	}
+
+	for _, redirect := range pipeline[i].redirects {
+		//nolint:gosec // Opening files based on user input is the intended behavior of a shell
+		file, err := os.OpenFile(redirect.file, os.O_CREATE|os.O_WRONLY|redirect.appendFlag, 0o644)
+		if err != nil {
+			closeAll(closers)
+			return shellStream{}, nil, nil, fmt.Errorf("%s: %s", redirect.file, err.Error())
+		}
+		closers = append(closers, file)
+		switch redirect.fd {
+		case 1:
+			cmdStream.stdout = file
+		case 2:
+			cmdStream.stderr = file
+		default:
+			closeAll(closers)
+			return shellStream{}, nil, nil, fmt.Errorf("unsupported redirect fd: %d", redirect.fd)
+		}
+	}
+	return cmdStream, closers, prevReader, nil
+}
+
+func startBuiltinCommand(
+	bc builtinCommand,
+	segment commandSegment,
+	cmdStream shellStream,
+	closers []io.Closer,
+	wg *sync.WaitGroup,
+) error {
+	if !bc.canRunAsync {
+		err := bc.fn(segment.args, cmdStream)
+		closeAll(closers)
+		return err
+	}
+
+	wg.Add(1)
+	go func(args []string, cmdStream shellStream, closers []io.Closer) {
+		defer closeAll(closers)
+		defer wg.Done()
+		_ = bc.fn(args, cmdStream)
+	}(segment.args, cmdStream, closers)
+
+	return nil
+}
+
+func (s *Shell) startExternalCommand(
+	segment commandSegment,
+	cmdStream shellStream,
+	closers []io.Closer,
+	wg *sync.WaitGroup,
+) error {
+	path, found := s.findExecutable(segment.command)
+	if !found {
+		_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", segment.command)
+		closeAll(closers)
+		return nil
+	}
+	//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
+	cmd := exec.CommandContext(context.Background(), path, segment.args...)
+	cmd.Args[0] = segment.command
+	cmd.Dir = s.workingDir
+	cmd.Stdin = cmdStream.stdin
+	cmd.Stdout = cmdStream.stdout
+	cmd.Stderr = cmdStream.stderr
+
+	if err := cmd.Start(); err != nil {
+		closeAll(closers)
+		return fmt.Errorf("failed to start command: %w", err)
+	}
+
+	wg.Add(1)
+	go func(c *exec.Cmd, closers []io.Closer) {
+		defer closeAll(closers)
+		defer wg.Done()
+		_ = c.Wait()
+	}(cmd, closers)
+	return nil
+}
+
+func closeAll(closers []io.Closer) {
+	for _, closer := range closers {
+		_ = closer.Close()
+	}
+}
+
+type commandLine struct {
+	pipeline []commandSegment
+}
+
+type commandSegment struct {
+	command   string
+	args      []string
+	redirects []redirect
+}
+
+func parseInput(input string) (commandLine, error) {
+	cl := commandLine{}
+	splitedInput := handleQuotesAndEscapes(input)
+	pipelineStr, err := splitPipeline(splitedInput)
+	if err != nil {
+		return cl, err
+	}
+
+	for _, cmdStr := range pipelineStr {
+		if len(cmdStr) == 0 {
+			return cl, fmt.Errorf("empty command")
+		}
+		command, args := cmdStr[0], cmdStr[1:]
+
+		args, redirects, err := parseRedirect(args)
+		if err != nil {
+			return cl, err
+		}
+		cl.pipeline = append(cl.pipeline, commandSegment{
+			command:   command,
+			args:      args,
+			redirects: redirects,
+		})
+	}
+	return cl, nil
 }

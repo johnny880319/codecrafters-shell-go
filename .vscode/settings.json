@@ -1,16 +1,21 @@
 {
-  "[go]": {
-    "editor.defaultFormatter": "golang.go",
+    // general
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "notebook.output.scrolling": true,
     "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit"
+    // go
+    "[go]": {
+        "editor.defaultFormatter": "golang.go",
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    "go.lintOnSave": "package",
+    "go.lintTool": "golangci-lint",
+    "go.toolsManagement.autoUpdate": true,
+    "gopls": {
+        "gofumpt": true,
+        "ui.semanticTokens": true
     }
-  },
-  "go.lintOnSave": "package",
-  "go.lintTool": "golangci-lint",
-  "go.toolsManagement.autoUpdate": true,
-  "gopls": {
-    "gofumpt": true,
-    "ui.semanticTokens": true
-  }
 }
