@@ -198,14 +198,21 @@ func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int,
 }
 
 type job struct {
-	id      int
-	pid     int
-	command string
-	status  string
+	id        int
+	pid       int
+	command   string
+	status    string
+	hasShowed bool
 }
 
 func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
 	for _, job := range s.jobs {
+		if job.hasShowed {
+			continue
+		}
+		if job.status == "Done" {
+			job.hasShowed = true
+		}
 		indicator := " "
 		if job.id == len(s.jobs) {
 			indicator = "+"
