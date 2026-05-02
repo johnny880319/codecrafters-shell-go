@@ -206,18 +206,15 @@ type job struct {
 }
 
 func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
-	for _, job := range s.jobs {
-		if job.hasShowed {
-			continue
-		}
+	for i, job := range s.jobs {
 		if job.status == "Done" {
 			job.hasShowed = true
 		}
 		indicator := " "
-		if job.id == len(s.jobs) {
+		if i == len(s.jobs)-1 {
 			indicator = "+"
 		}
-		if job.id == len(s.jobs)-1 {
+		if i == len(s.jobs)-2 {
 			indicator = "-"
 		}
 		_, _ = fmt.Fprintf(
@@ -229,5 +226,12 @@ func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
 			job.command,
 		)
 	}
+	newJobs := make([]*job, 0)
+	for _, job := range s.jobs {
+		if !job.hasShowed {
+			newJobs = append(newJobs, job)
+		}
+	}
+	s.jobs = newJobs
 	return nil
 }
