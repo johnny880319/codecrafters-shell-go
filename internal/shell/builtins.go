@@ -12,8 +12,8 @@ import (
 )
 
 type builtinCommand struct {
-	fn      func(args []string, cmdIO shellStream) error
-	isAsync bool
+	fn          func(args []string, cmdIO shellStream) error
+	canRunAsync bool
 }
 
 func (s *Shell) getCommandFuncMap() map[string]builtinCommand {

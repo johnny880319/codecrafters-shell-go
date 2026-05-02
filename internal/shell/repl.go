@@ -143,7 +143,7 @@ func (s *Shell) execute(input string) error {
 			closers   []io.Closer
 			err       error
 		)
-		cmdStream, closers, prevReader, err = s.handleStream(prevReader, i, cmdline)
+		cmdStream, closers, prevReader, err = s.handleStream(prevReader, i, cmdline.pipeline)
 		if err != nil {
 			return err
 		}
@@ -168,7 +168,7 @@ func (s *Shell) execute(input string) error {
 func (s *Shell) handleStream(
 	prevReader io.Reader,
 	i int,
-	cmdline commandLine,
+	pipeline []commandSegment,
 ) (shellStream, []io.Closer, io.Reader, error) {
 	var closers []io.Closer
 	cmdStream := shellStream{
@@ -184,14 +184,14 @@ func (s *Shell) handleStream(
 		}
 		closers = append(closers, closer)
 	}
-	if i < len(cmdline.pipeline)-1 {
+	if i < len(pipeline)-1 {
 		pr, pw := io.Pipe()
 		cmdStream.stdout = pw
 		prevReader = pr // used for the next round of loop
 		closers = append(closers, pw)
 	}
 
-	for _, redirect := range cmdline.pipeline[i].redirects {
+	for _, redirect := range pipeline[i].redirects {
 		//nolint:gosec // Opening files based on user input is the intended behavior of a shell
 		file, err := os.OpenFile(redirect.file, os.O_CREATE|os.O_WRONLY|redirect.appendFlag, 0o644)
 		if err != nil {
@@ -219,7 +219,7 @@ func startBuiltinCommand(
 	closers []io.Closer,
 	wg *sync.WaitGroup,
 ) error {
-	if !bc.isAsync {
+	if !bc.canRunAsync {
 		err := bc.fn(segment.args, cmdStream)
 		closeAll(closers)
 		return err
