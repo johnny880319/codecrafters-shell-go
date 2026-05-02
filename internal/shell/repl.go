@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/chzyer/readline"
@@ -136,6 +137,7 @@ func (s *Shell) execute(input string) error {
 
 	var wg sync.WaitGroup
 
+	pid := 0
 	prevReader := s.stream.stdin
 	for i, pl := range cmdline.pipeline {
 		var (
@@ -155,13 +157,17 @@ func (s *Shell) execute(input string) error {
 			}
 			continue
 		}
-		err = s.startExternalCommand(pl, cmdStream, closers, &wg)
+		pid, err = s.startExternalCommand(pl, cmdStream, closers, &wg)
 		if err != nil {
 			return err
 		}
 	}
 
-	wg.Wait()
+	if cmdline.isBackground {
+		_, _ = fmt.Fprintf(s.stream.stdout, "[1] %d\n", pid)
+	} else {
+		wg.Wait()
+	}
 	return nil
 }
 
@@ -240,12 +246,12 @@ func (s *Shell) startExternalCommand(
 	cmdStream shellStream,
 	closers []io.Closer,
 	wg *sync.WaitGroup,
-) error {
+) (int, error) {
 	path, found := s.findExecutable(segment.command)
 	if !found {
 		_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", segment.command)
 		closeAll(closers)
-		return nil
+		return 0, nil
 	}
 	//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
 	cmd := exec.CommandContext(context.Background(), path, segment.args...)
@@ -257,7 +263,7 @@ func (s *Shell) startExternalCommand(
 
 	if err := cmd.Start(); err != nil {
 		closeAll(closers)
-		return fmt.Errorf("failed to start command: %w", err)
+		return 0, fmt.Errorf("failed to start command: %w", err)
 	}
 
 	wg.Add(1)
@@ -266,7 +272,7 @@ func (s *Shell) startExternalCommand(
 		defer wg.Done()
 		_ = c.Wait()
 	}(cmd, closers)
-	return nil
+	return cmd.Process.Pid, nil
 }
 
 func closeAll(closers []io.Closer) {
@@ -276,7 +282,8 @@ func closeAll(closers []io.Closer) {
 }
 
 type commandLine struct {
-	pipeline []commandSegment
+	pipeline     []commandSegment
+	isBackground bool
 }
 
 type commandSegment struct {
@@ -287,6 +294,11 @@ type commandSegment struct {
 
 func parseInput(input string) (commandLine, error) {
 	cl := commandLine{}
+	input = strings.TrimSpace(input)
+	if input[len(input)-1] == '&' {
+		cl.isBackground = true
+		input = strings.TrimSpace(input[:len(input)-1])
+	}
 	splitedInput := handleQuotesAndEscapes(input)
 	pipelineStr, err := splitPipeline(splitedInput)
 	if err != nil {

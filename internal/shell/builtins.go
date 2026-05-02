@@ -24,6 +24,7 @@ func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 		"pwd":     {s.cmdPwd, true},
 		"cd":      {s.cmdCd, false},
 		"history": {s.cmdHistory, true},
+		"jobs":    {s.cmdJobs, true},
 	}
 }
 
@@ -193,5 +194,10 @@ func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int,
 	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("flush history to file: %w", err)
 	}
+	return nil
+}
+
+func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
+	// not implemented yet
 	return nil
 }
