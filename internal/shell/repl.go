@@ -138,47 +138,25 @@ func (s *Shell) execute(input string) error {
 
 	prevReader := s.stream.stdin
 	for i, pl := range cmdline.pipeline {
-		var closers []io.Closer
-		cmdStream := shellStream{
-			stdin:  prevReader,
-			stdout: s.stream.stdout,
-			stderr: s.stream.stderr,
+		var (
+			cmdStream shellStream
+			closers   []io.Closer
+			err       error
+		)
+		cmdStream, closers, prevReader, err = s.handleStream(prevReader, i, cmdline)
+		if err != nil {
+			return err
 		}
 
-		if i > 0 {
-			closer, ok := prevReader.(io.Closer)
-			if !ok {
-				return fmt.Errorf("previous reader is not closable")
-			}
-			closers = append(closers, closer)
-		}
-		if i < len(cmdline.pipeline)-1 {
-			pr, pw := io.Pipe()
-			cmdStream.stdout = pw
-			prevReader = pr // used for the next round of loop
-			closers = append(closers, pw)
-		}
-
-		for _, redirect := range pl.redirects {
-			//nolint:gosec // Opening files based on user input is the intended behavior of a shell
-			file, err := os.OpenFile(redirect.file, os.O_CREATE|os.O_WRONLY|redirect.appendFlag, 0o644)
+		if bc, ok := s.builtinCommandMap[pl.command]; ok {
+			err := startBuiltinCommand(bc, pl, cmdStream, closers, &wg)
 			if err != nil {
-				closeAll(closers)
-				return fmt.Errorf("%s: %s", redirect.file, err.Error())
+				return err
 			}
-			closers = append(closers, file)
-			switch redirect.fd {
-			case 1:
-				cmdStream.stdout = file
-			case 2:
-				cmdStream.stderr = file
-			default:
-				closeAll(closers)
-				return fmt.Errorf("unsupported redirect fd: %d", redirect.fd)
-			}
+			continue
 		}
-
-		if err := s.executeCommandSegment(pl, cmdStream, closers, &wg); err != nil {
+		err = s.startExternalCommand(pl, cmdStream, closers, &wg)
+		if err != nil {
 			return err
 		}
 	}
@@ -187,29 +165,82 @@ func (s *Shell) execute(input string) error {
 	return nil
 }
 
-func (s *Shell) executeCommandSegment(
+func (s *Shell) handleStream(
+	prevReader io.Reader,
+	i int,
+	cmdline commandLine,
+) (shellStream, []io.Closer, io.Reader, error) {
+	var closers []io.Closer
+	cmdStream := shellStream{
+		stdin:  prevReader,
+		stdout: s.stream.stdout,
+		stderr: s.stream.stderr,
+	}
+
+	if i > 0 {
+		closer, ok := prevReader.(io.Closer)
+		if !ok {
+			return shellStream{}, nil, nil, fmt.Errorf("previous reader is not closable")
+		}
+		closers = append(closers, closer)
+	}
+	if i < len(cmdline.pipeline)-1 {
+		pr, pw := io.Pipe()
+		cmdStream.stdout = pw
+		prevReader = pr // used for the next round of loop
+		closers = append(closers, pw)
+	}
+
+	for _, redirect := range cmdline.pipeline[i].redirects {
+		//nolint:gosec // Opening files based on user input is the intended behavior of a shell
+		file, err := os.OpenFile(redirect.file, os.O_CREATE|os.O_WRONLY|redirect.appendFlag, 0o644)
+		if err != nil {
+			closeAll(closers)
+			return shellStream{}, nil, nil, fmt.Errorf("%s: %s", redirect.file, err.Error())
+		}
+		closers = append(closers, file)
+		switch redirect.fd {
+		case 1:
+			cmdStream.stdout = file
+		case 2:
+			cmdStream.stderr = file
+		default:
+			closeAll(closers)
+			return shellStream{}, nil, nil, fmt.Errorf("unsupported redirect fd: %d", redirect.fd)
+		}
+	}
+	return cmdStream, closers, prevReader, nil
+}
+
+func startBuiltinCommand(
+	bc builtinCommand,
 	segment commandSegment,
 	cmdStream shellStream,
 	closers []io.Closer,
 	wg *sync.WaitGroup,
 ) error {
-	if bc, ok := s.builtinCommandMap[segment.command]; ok {
-		if !bc.isAsync {
-			err := bc.fn(segment.args, cmdStream)
-			closeAll(closers)
-			return err
-		}
-
-		wg.Add(1)
-		go func(args []string, cmdStream shellStream, closers []io.Closer) {
-			defer closeAll(closers)
-			defer wg.Done()
-			_ = bc.fn(args, cmdStream)
-		}(segment.args, cmdStream, closers)
-
-		return nil
+	if !bc.isAsync {
+		err := bc.fn(segment.args, cmdStream)
+		closeAll(closers)
+		return err
 	}
 
+	wg.Add(1)
+	go func(args []string, cmdStream shellStream, closers []io.Closer) {
+		defer closeAll(closers)
+		defer wg.Done()
+		_ = bc.fn(args, cmdStream)
+	}(segment.args, cmdStream, closers)
+
+	return nil
+}
+
+func (s *Shell) startExternalCommand(
+	segment commandSegment,
+	cmdStream shellStream,
+	closers []io.Closer,
+	wg *sync.WaitGroup,
+) error {
 	path, found := s.findExecutable(segment.command)
 	if !found {
 		_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", segment.command)

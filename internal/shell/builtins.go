@@ -33,7 +33,6 @@ func (s *Shell) cmdExit(_ []string, _ shellStream) error {
 }
 
 func (s *Shell) cmdEcho(args []string, cmdIO shellStream) error {
-	//nolint:gosec // A shell intentionally writes user-provided command text to stdout/stderr.
 	_, err := fmt.Fprintln(cmdIO.stdout, strings.Join(args, " "))
 	return err
 }
@@ -41,17 +40,14 @@ func (s *Shell) cmdEcho(args []string, cmdIO shellStream) error {
 func (s *Shell) cmdType(args []string, cmdIO shellStream) error {
 	for _, arg := range args {
 		if _, ok := s.builtinCommandMap[arg]; ok {
-			//nolint:gosec // A shell intentionally writes user-provided command text to stdout/stderr.
 			if _, err := fmt.Fprintf(cmdIO.stdout, "%s is a shell builtin\n", arg); err != nil {
 				return err
 			}
 		} else if path, found := s.findExecutable(arg); found {
-			//nolint:gosec // A shell intentionally writes user-provided command text to stdout/stderr.
 			if _, err := fmt.Fprintf(cmdIO.stdout, "%s is %s\n", arg, path); err != nil {
 				return err
 			}
 		} else {
-			//nolint:gosec // A shell intentionally writes user-provided command text to stdout/stderr.
 			if _, err := fmt.Fprintf(cmdIO.stderr, "%s: not found\n", arg); err != nil {
 				return err
 			}
@@ -125,7 +121,6 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 	if len(args) > 0 {
 		n, err := strconv.Atoi(args[0])
 		if err != nil {
-			//nolint:gosec // A shell intentionally writes user-provided command text to stdout/stderr.
 			if _, err := fmt.Fprintf(cmdIO.stderr, "history: %s: numeric argument required\n", args[0]); err != nil {
 				return err
 			}
@@ -136,7 +131,6 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 	}
 
 	for i, cmd := range s.history.lines[start-1:] {
-		//nolint:gosec // A shell intentionally writes user-provided command text to stdout/stderr.
 		if _, err := fmt.Fprintf(cmdIO.stdout, "%d %s\n", i+start, cmd); err != nil {
 			return err
 		}
