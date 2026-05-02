@@ -97,7 +97,7 @@ func (c *customCompleter) getMatchStrings(lineStr string) []string {
 	var matches []string
 	splitedStr := strings.Split(lineStr, " ")
 	if len(splitedStr) == 1 {
-		for builtin := range c.shell.commandFuncMap {
+		for builtin := range c.shell.builtinCommandMap {
 			if strings.HasPrefix(builtin, lineStr) {
 				completion := builtin[len(lineStr):]
 				matches = append(matches, completion)

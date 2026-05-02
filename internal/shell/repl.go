@@ -19,11 +19,11 @@ var readlineInitMutex sync.Mutex
 
 // Shell represents the core state of the interactive shell.
 type Shell struct {
-	workingDir     string
-	commandFuncMap map[string]func(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
-	stream         shellStream
-	env            shellEnv
-	history        shellHistory
+	workingDir        string
+	builtinCommandMap map[string]builtinCommand
+	stream            shellStream
+	env               shellEnv
+	history           shellHistory
 }
 
 type shellStream struct {
@@ -73,8 +73,8 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		opt(s)
 	}
 
-	s.commandFuncMap = s.getCommandFuncMap()
-	if err := s.readHistoryFromFile(s.env.histfile, s.stream.stderr); err != nil {
+	s.builtinCommandMap = s.getCommandFuncMap()
+	if err := s.readHistoryFromFile(s.env.histfile, s.stream); err != nil {
 		_, _ = fmt.Fprintf(s.stream.stderr, "read history from file error: %v\n", err)
 	}
 	s.history.startLine = len(s.history.lines)
@@ -127,12 +127,6 @@ func (s *Shell) Repl() error {
 	}
 }
 
-type ioFlow struct {
-	stdin  io.Reader
-	stdout io.Writer
-	stderr io.Writer
-}
-
 //nolint:gocognit // Will be refactored in a future exercise
 func (s *Shell) execute(input string) error {
 	s.history.lines = append(s.history.lines, input)
@@ -146,7 +140,7 @@ func (s *Shell) execute(input string) error {
 	prevReader := s.stream.stdin
 	for i, pl := range cmdline.pipeline {
 		var closers []io.Closer
-		cmdIO := ioFlow{
+		cmdStream := shellStream{
 			stdin:  prevReader,
 			stdout: s.stream.stdout,
 			stderr: s.stream.stderr,
@@ -161,7 +155,7 @@ func (s *Shell) execute(input string) error {
 		}
 		if i < len(cmdline.pipeline)-1 {
 			pr, pw := io.Pipe()
-			cmdIO.stdout = pw
+			cmdStream.stdout = pw
 			prevReader = pr // used for the next round of loop
 			closers = append(closers, pw)
 		}
@@ -176,18 +170,18 @@ func (s *Shell) execute(input string) error {
 			closers = append(closers, file)
 			switch redirect.fd {
 			case 1:
-				cmdIO.stdout = file
+				cmdStream.stdout = file
 			case 2:
-				cmdIO.stderr = file
+				cmdStream.stderr = file
 			default:
 				closeAll(closers)
 				return fmt.Errorf("unsupported redirect fd: %d", redirect.fd)
 			}
 		}
 
-		if commandFunc, ok := s.commandFuncMap[pl.command]; ok {
-			if pl.command == "cd" || pl.command == "exit" {
-				err = commandFunc(pl.args, cmdIO.stdin, cmdIO.stdout, cmdIO.stderr)
+		if bc, ok := s.builtinCommandMap[pl.command]; ok {
+			if !bc.isAsync {
+				err = bc.fn(pl.args, cmdStream)
 				closeAll(closers)
 				if errors.Is(err, io.EOF) {
 					return io.EOF
@@ -195,11 +189,11 @@ func (s *Shell) execute(input string) error {
 				continue
 			}
 			wg.Add(1)
-			go func(args []string, cmdIO ioFlow, closers []io.Closer) {
+			go func(args []string, cmdStream shellStream, closers []io.Closer) {
 				defer closeAll(closers)
 				defer wg.Done()
-				_ = commandFunc(args, cmdIO.stdin, cmdIO.stdout, cmdIO.stderr)
-			}(pl.args, cmdIO, closers)
+				_ = bc.fn(args, cmdStream)
+			}(pl.args, cmdStream, closers)
 
 			continue
 		}
@@ -214,9 +208,9 @@ func (s *Shell) execute(input string) error {
 		cmd := exec.CommandContext(context.Background(), path, pl.args...)
 		cmd.Args[0] = pl.command
 		cmd.Dir = s.workingDir
-		cmd.Stdin = cmdIO.stdin
-		cmd.Stdout = cmdIO.stdout
-		cmd.Stderr = cmdIO.stderr
+		cmd.Stdin = cmdStream.stdin
+		cmd.Stdout = cmdStream.stdout
+		cmd.Stderr = cmdStream.stderr
 
 		if err := cmd.Start(); err != nil {
 			closeAll(closers)

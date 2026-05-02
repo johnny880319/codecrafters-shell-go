@@ -11,39 +11,44 @@ import (
 	"strings"
 )
 
-func (s *Shell) getCommandFuncMap() map[string]func([]string, io.Reader, io.Writer, io.Writer) error {
-	return map[string]func([]string, io.Reader, io.Writer, io.Writer) error{
-		"exit":    s.cmdExit,
-		"echo":    s.cmdEcho,
-		"type":    s.cmdType,
-		"pwd":     s.cmdPwd,
-		"cd":      s.cmdCd,
-		"history": s.cmdHistory,
+type builtinCommand struct {
+	fn      func(args []string, cmdIO shellStream) error
+	isAsync bool
+}
+
+func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
+	return map[string]builtinCommand{
+		"exit":    {s.cmdExit, false},
+		"echo":    {s.cmdEcho, true},
+		"type":    {s.cmdType, true},
+		"pwd":     {s.cmdPwd, true},
+		"cd":      {s.cmdCd, false},
+		"history": {s.cmdHistory, true},
 	}
 }
 
-func (s *Shell) cmdExit(_ []string, _ io.Reader, _ io.Writer, _ io.Writer) error {
-	_ = s.writeHistoryToFile(s.env.histfile, s.stream.stderr, os.O_APPEND, s.history.startLine)
+func (s *Shell) cmdExit(_ []string, _ shellStream) error {
+	_ = s.writeHistoryToFile(s.env.histfile, s.stream, os.O_APPEND, s.history.startLine)
 	return io.EOF
 }
 
-func (s *Shell) cmdEcho(args []string, _ io.Reader, stdout io.Writer, _ io.Writer) error {
-	_, err := fmt.Fprintln(stdout, strings.Join(args, " "))
+func (s *Shell) cmdEcho(args []string, cmdIO shellStream) error {
+	_, err := fmt.Fprintln(cmdIO.stdout, strings.Join(args, " "))
 	return err
 }
 
-func (s *Shell) cmdType(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
+func (s *Shell) cmdType(args []string, cmdIO shellStream) error {
 	for _, arg := range args {
-		if _, ok := s.commandFuncMap[arg]; ok {
-			if _, err := fmt.Fprintf(stdout, "%s is a shell builtin\n", arg); err != nil {
+		if _, ok := s.builtinCommandMap[arg]; ok {
+			if _, err := fmt.Fprintf(cmdIO.stdout, "%s is a shell builtin\n", arg); err != nil {
 				return err
 			}
 		} else if path, found := s.findExecutable(arg); found {
-			if _, err := fmt.Fprintf(stdout, "%s is %s\n", arg, path); err != nil {
+			if _, err := fmt.Fprintf(cmdIO.stdout, "%s is %s\n", arg, path); err != nil {
 				return err
 			}
 		} else {
-			if _, err := fmt.Fprintf(stderr, "%s: not found\n", arg); err != nil {
+			if _, err := fmt.Fprintf(cmdIO.stderr, "%s: not found\n", arg); err != nil {
 				return err
 			}
 		}
@@ -51,24 +56,24 @@ func (s *Shell) cmdType(args []string, _ io.Reader, stdout io.Writer, stderr io.
 	return nil
 }
 
-func (s *Shell) cmdPwd(_ []string, _ io.Reader, stdout io.Writer, _ io.Writer) error {
-	_, err := fmt.Fprintln(stdout, s.workingDir)
+func (s *Shell) cmdPwd(_ []string, cmdIO shellStream) error {
+	_, err := fmt.Fprintln(cmdIO.stdout, s.workingDir)
 	return err
 }
 
-func (s *Shell) cmdCd(args []string, _ io.Reader, _ io.Writer, stderr io.Writer) error {
+func (s *Shell) cmdCd(args []string, cmdIO shellStream) error {
 	if len(args) == 0 {
 		s.workingDir = os.Getenv("HOME")
 		return nil
 	}
 	if len(args) > 1 {
-		_, err := fmt.Fprintln(stderr, "cd: too many arguments")
+		_, err := fmt.Fprintln(cmdIO.stderr, "cd: too many arguments")
 		return err
 	}
 
 	newPath := args[0]
 	if filepath.IsAbs(newPath) {
-		return s.checkDirectory(newPath, stderr)
+		return s.checkDirectory(newPath, cmdIO.stderr)
 	}
 
 	if strings.HasPrefix(newPath, "~") {
@@ -76,7 +81,7 @@ func (s *Shell) cmdCd(args []string, _ io.Reader, _ io.Writer, stderr io.Writer)
 		newPath = newPath[1:]
 	}
 	absPath := filepath.Join(s.workingDir, newPath)
-	return s.checkDirectory(absPath, stderr)
+	return s.checkDirectory(absPath, cmdIO.stderr)
 }
 
 func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
@@ -96,17 +101,17 @@ func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
 	return nil
 }
 
-func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr io.Writer) error {
+func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 	if len(args) > 1 && args[0] == "-r" {
-		return s.readHistoryFromFile(args[1], stderr)
+		return s.readHistoryFromFile(args[1], cmdIO)
 	}
 
 	if len(args) > 0 && args[0] == "-w" {
-		return s.writeHistoryToFile(args[1], stderr, os.O_TRUNC, 0)
+		return s.writeHistoryToFile(args[1], cmdIO, os.O_TRUNC, 0)
 	}
 
 	if len(args) > 0 && args[0] == "-a" {
-		err := s.writeHistoryToFile(args[1], stderr, os.O_APPEND, s.history.appendLine)
+		err := s.writeHistoryToFile(args[1], cmdIO, os.O_APPEND, s.history.appendLine)
 		s.history.appendLine = len(s.history.lines)
 		return err
 	}
@@ -116,7 +121,7 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 	if len(args) > 0 {
 		n, err := strconv.Atoi(args[0])
 		if err != nil {
-			if _, err := fmt.Fprintf(stderr, "history: %s: numeric argument required\n", args[0]); err != nil {
+			if _, err := fmt.Fprintf(cmdIO.stderr, "history: %s: numeric argument required\n", args[0]); err != nil {
 				return err
 			}
 			return nil
@@ -126,7 +131,7 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 	}
 
 	for i, cmd := range s.history.lines[start-1:] {
-		if _, err := fmt.Fprintf(stdout, "%d %s\n", i+start, cmd); err != nil {
+		if _, err := fmt.Fprintf(cmdIO.stdout, "%d %s\n", i+start, cmd); err != nil {
 			return err
 		}
 	}
@@ -134,7 +139,7 @@ func (s *Shell) cmdHistory(args []string, _ io.Reader, stdout io.Writer, stderr 
 	return nil
 }
 
-func (s *Shell) readHistoryFromFile(filepath string, stderr io.Writer) error {
+func (s *Shell) readHistoryFromFile(filepath string, cmdIO shellStream) error {
 	//nolint:gosec // A shell's intended behavior is to open files specified by the user
 	file, err := os.Open(filepath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -145,7 +150,7 @@ func (s *Shell) readHistoryFromFile(filepath string, stderr io.Writer) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
+			if _, err := fmt.Fprintf(cmdIO.stderr, "close history file error: %v\n", err); err != nil {
 				return
 			}
 		}
@@ -158,14 +163,14 @@ func (s *Shell) readHistoryFromFile(filepath string, stderr io.Writer) error {
 	}
 	if err := scanner.Err(); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			_, printfErr := fmt.Fprintf(stderr, "history: %s: No such file or directory\n", filepath)
+			_, printfErr := fmt.Fprintf(cmdIO.stderr, "history: %s: No such file or directory\n", filepath)
 			return printfErr
 		}
 	}
 	return nil
 }
 
-func (s *Shell) writeHistoryToFile(filepath string, stderr io.Writer, flag int, index int) error {
+func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int, index int) error {
 	//nolint:gosec // A shell's intended behavior is to open files specified by the user
 	file, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|flag, 0o644)
 	if err != nil {
@@ -173,7 +178,7 @@ func (s *Shell) writeHistoryToFile(filepath string, stderr io.Writer, flag int, 
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			if _, err := fmt.Fprintf(stderr, "close history file error: %v\n", err); err != nil {
+			if _, err := fmt.Fprintf(cmdIO.stderr, "close history file error: %v\n", err); err != nil {
 				return
 			}
 		}
