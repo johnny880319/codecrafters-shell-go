@@ -204,32 +204,31 @@ func (s *Shell) execute(input string) error {
 			continue
 		}
 
-		if path, found := s.findExecutable(pl.command); found {
-			//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
-			cmd := exec.CommandContext(context.Background(), path, pl.args...)
-			cmd.Args[0] = pl.command
-			cmd.Dir = s.workingDir
-			cmd.Stdin = cmdIO.stdin
-			cmd.Stdout = cmdIO.stdout
-			cmd.Stderr = cmdIO.stderr
-
-			if err := cmd.Start(); err != nil {
-				closeAll(closers)
-				return fmt.Errorf("failed to start command: %w", err)
-			}
-
-			wg.Add(1)
-			go func(c *exec.Cmd, closers []io.Closer) {
-				defer wg.Done()
-				defer closeAll(closers)
-				_ = c.Wait()
-			}(cmd, closers)
-		} else {
-			if _, err := fmt.Fprintf(s.stream.stdout, "%s: command not found\n", pl.command); err != nil {
-				closeAll(closers)
-				return fmt.Errorf("write command output: %w", err)
-			}
+		path, found := s.findExecutable(pl.command)
+		if !found {
+			_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", pl.command)
+			closeAll(closers)
+			return nil
 		}
+		//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
+		cmd := exec.CommandContext(context.Background(), path, pl.args...)
+		cmd.Args[0] = pl.command
+		cmd.Dir = s.workingDir
+		cmd.Stdin = cmdIO.stdin
+		cmd.Stdout = cmdIO.stdout
+		cmd.Stderr = cmdIO.stderr
+
+		if err := cmd.Start(); err != nil {
+			closeAll(closers)
+			return fmt.Errorf("failed to start command: %w", err)
+		}
+
+		wg.Add(1)
+		go func(c *exec.Cmd, closers []io.Closer) {
+			defer closeAll(closers)
+			defer wg.Done()
+			_ = c.Wait()
+		}(cmd, closers)
 	}
 
 	wg.Wait()
@@ -255,7 +254,10 @@ type commandSegment struct {
 func parseInput(input string) (commandLine, error) {
 	cl := commandLine{}
 	splitedInput := handleQuotesAndEscapes(input)
-	pipelineStr := splitPipeline(splitedInput)
+	pipelineStr, err := splitPipeline(splitedInput)
+	if err != nil {
+		return cl, err
+	}
 
 	for _, cmdStr := range pipelineStr {
 		if len(cmdStr) == 0 {

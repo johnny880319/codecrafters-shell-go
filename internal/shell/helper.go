@@ -34,7 +34,7 @@ func handleQuotesAndEscapes(input string) []string {
 	return fields
 }
 
-func splitPipeline(input []string) [][]string {
+func splitPipeline(input []string) ([][]string, error) {
 	var pipeline [][]string
 	currentCommand := []string{}
 	for _, arg := range input {
@@ -45,10 +45,11 @@ func splitPipeline(input []string) [][]string {
 			currentCommand = append(currentCommand, arg)
 		}
 	}
-	if len(currentCommand) > 0 {
-		pipeline = append(pipeline, currentCommand)
+	if len(currentCommand) == 0 {
+		return nil, fmt.Errorf("syntax error: unexpected token `|'")
 	}
-	return pipeline
+	pipeline = append(pipeline, currentCommand)
+	return pipeline, nil
 }
 
 func parseCharacter(r rune, escaped, inSingleQuotes, inDoubleQuotes bool) (string, bool, bool, bool) {
