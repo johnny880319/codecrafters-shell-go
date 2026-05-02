@@ -25,6 +25,7 @@ type Shell struct {
 	stream            shellStream
 	env               shellEnv
 	history           shellHistory
+	jobs              map[int]job
 }
 
 type shellStream struct {
@@ -68,6 +69,7 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		stream:     shellStream{stdin: in, stdout: out, stderr: out},
 		env:        shellEnv{path: os.Getenv("PATH"), histfile: os.Getenv("HISTFILE")},
 		workingDir: wd,
+		jobs:       make(map[int]job),
 	}
 
 	for _, opt := range opts {
@@ -164,7 +166,7 @@ func (s *Shell) execute(input string) error {
 	}
 
 	if cmdline.isBackground {
-		_, _ = fmt.Fprintf(s.stream.stdout, "[1] %d\n", pid)
+		_, _ = fmt.Fprintf(s.stream.stdout, "[%d] %d\n", s.jobs[pid].id, pid)
 	} else {
 		wg.Wait()
 	}
@@ -266,13 +268,22 @@ func (s *Shell) startExternalCommand(
 		return 0, fmt.Errorf("failed to start command: %w", err)
 	}
 
+	pid := cmd.Process.Pid
+	s.jobs[pid] = job{
+		id:      len(s.jobs) + 1,
+		pid:     pid,
+		command: segment.command + " " + strings.Join(segment.args, " "),
+		status:  "Running",
+	}
+
 	wg.Add(1)
 	go func(c *exec.Cmd, closers []io.Closer) {
 		defer closeAll(closers)
 		defer wg.Done()
 		_ = c.Wait()
 	}(cmd, closers)
-	return cmd.Process.Pid, nil
+
+	return pid, nil
 }
 
 func closeAll(closers []io.Closer) {

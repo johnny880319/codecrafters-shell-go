@@ -197,7 +197,22 @@ func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int,
 	return nil
 }
 
+type job struct {
+	id      int
+	pid     int
+	command string
+	status  string
+}
+
 func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
-	// not implemented yet
+	for _, job := range s.jobs {
+		_, _ = fmt.Fprintf(
+			s.stream.stdout,
+			"[%d]+  %-24s %s\n",
+			job.id,
+			job.status,
+			job.command,
+		)
+	}
 	return nil
 }
