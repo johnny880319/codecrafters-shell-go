@@ -205,8 +205,16 @@ type job struct {
 	hasShowed bool
 }
 
-func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
+func (s *Shell) cmdJobs(_ []string, cmdIO shellStream) error {
+	s.showJobs(cmdIO, false)
+	return nil
+}
+
+func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 	for i, job := range s.jobs {
+		if onlyDone && job.status != "Done" {
+			continue
+		}
 		if job.status == "Done" {
 			job.hasShowed = true
 		}
@@ -218,7 +226,7 @@ func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
 			indicator = "-"
 		}
 		_, _ = fmt.Fprintf(
-			s.stream.stdout,
+			cmdIO.stdout,
 			"[%d]%s  %-24s %s\n",
 			job.id,
 			indicator,
@@ -233,5 +241,4 @@ func (s *Shell) cmdJobs(_ []string, _ shellStream) error {
 		}
 	}
 	s.jobs = newJobs
-	return nil
 }

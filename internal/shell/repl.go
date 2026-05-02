@@ -165,7 +165,7 @@ func (s *Shell) execute(input string) error {
 			closeAll(closers)
 			continue
 		}
-		currentJob, err = s.startExternalCommand(path, pl, cmdStream, closers, &wg)
+		currentJob, err = s.startExternalCommand(path, pl, cmdStream, closers, &wg, cmdline.isBackground)
 		if err != nil {
 			return err
 		}
@@ -176,6 +176,7 @@ func (s *Shell) execute(input string) error {
 	} else {
 		wg.Wait()
 	}
+	s.showJobs(s.stream, true)
 	return nil
 }
 
@@ -255,6 +256,7 @@ func (s *Shell) startExternalCommand(
 	cmdStream shellStream,
 	closers []io.Closer,
 	wg *sync.WaitGroup,
+	isBackground bool,
 ) (*job, error) {
 	//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
 	cmd := exec.CommandContext(context.Background(), path, segment.args...)
@@ -269,21 +271,26 @@ func (s *Shell) startExternalCommand(
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
 
-	currentJob := &job{
-		id:        len(s.jobs) + 1,
-		pid:       cmd.Process.Pid,
-		command:   segment.command + " " + strings.Join(segment.args, " "),
-		status:    "Running",
-		hasShowed: false,
+	var currentJob *job
+	if isBackground {
+		currentJob = &job{
+			id:        len(s.jobs) + 1,
+			pid:       cmd.Process.Pid,
+			command:   segment.command + " " + strings.Join(segment.args, " "),
+			status:    "Running",
+			hasShowed: false,
+		}
+		s.jobs = append(s.jobs, currentJob)
 	}
-	s.jobs = append(s.jobs, currentJob)
 
 	wg.Add(1)
 	go func(c *exec.Cmd, closers []io.Closer) {
 		defer closeAll(closers)
 		defer wg.Done()
 		_ = c.Wait()
-		currentJob.status = "Done"
+		if isBackground {
+			currentJob.status = "Done"
+		}
 	}(cmd, closers)
 
 	return currentJob, nil
