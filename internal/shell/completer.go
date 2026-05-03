@@ -95,7 +95,7 @@ func longestCommonPrefix(strs []string) string {
 
 func (c *customCompleter) getMatchStrings(lineStr string) []string {
 	var matches []string
-	splitedStr := strings.Split(lineStr, " ")
+	splitedStr := handleQuotesAndEscapes(lineStr)
 	if len(splitedStr) == 1 {
 		for builtin := range c.shell.builtinCommandMap {
 			if strings.HasPrefix(builtin, lineStr) {

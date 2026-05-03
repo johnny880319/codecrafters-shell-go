@@ -27,9 +27,7 @@ func handleQuotesAndEscapes(input string) []string {
 		curField += str
 	}
 
-	if curField != "" {
-		fields = append(fields, curField)
-	}
+	fields = append(fields, curField)
 
 	return fields
 }
@@ -38,10 +36,13 @@ func splitPipeline(input []string) ([][]string, error) {
 	var pipeline [][]string
 	currentCommand := []string{}
 	for _, arg := range input {
-		if arg == "|" {
+		switch arg {
+		case "":
+			continue
+		case "|":
 			pipeline = append(pipeline, currentCommand)
 			currentCommand = []string{}
-		} else {
+		default:
 			currentCommand = append(currentCommand, arg)
 		}
 	}

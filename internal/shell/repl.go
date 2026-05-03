@@ -302,7 +302,7 @@ func (s *Shell) startExternalCommand(
 			jobID++
 		}
 
-		var currentJob = &job{
+		currentJob = &job{
 			id:        jobID,
 			pid:       cmd.Process.Pid,
 			command:   segment.command + " " + strings.Join(segment.args, " "),
@@ -348,7 +348,7 @@ type commandSegment struct {
 func parseInput(input string) (commandLine, error) {
 	cl := commandLine{}
 	input = strings.TrimSpace(input)
-	if input[len(input)-1] == '&' {
+	if len(input) > 0 && input[len(input)-1] == '&' {
 		cl.isBackground = true
 		input = strings.TrimSpace(input[:len(input)-1])
 	}

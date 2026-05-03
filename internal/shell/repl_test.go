@@ -26,6 +26,20 @@ func TestHandleInvalidCommands(t *testing.T) {
 	)
 }
 
+func TestHandleEmptyInput(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+		}, ""),
+	)
+}
+
 func TestImplementARepl(t *testing.T) {
 	t.Parallel()
 	testTemplate(
