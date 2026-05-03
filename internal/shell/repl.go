@@ -271,10 +271,24 @@ func (s *Shell) startExternalCommand(
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
 
+	jobID := 1
+	for {
+		idExists := false
+		for _, job := range s.jobs {
+			if job.id == jobID {
+				idExists = true
+				break
+			}
+		}
+		if !idExists {
+			break
+		}
+		jobID++
+	}
 	var currentJob *job
 	if isBackground {
 		currentJob = &job{
-			id:        len(s.jobs) + 1,
+			id:        jobID,
 			pid:       cmd.Process.Pid,
 			command:   segment.command + " " + strings.Join(segment.args, " "),
 			status:    "Running",
