@@ -16,6 +16,7 @@ import (
 
 const prompt = "$ "
 
+// Guards readline.NewEx during parallel test execution.
 var readlineInitMutex sync.Mutex
 
 // Shell represents the core state of the interactive shell.
@@ -25,7 +26,7 @@ type Shell struct {
 	stream            shellStream
 	env               shellEnv
 	history           shellHistory
-	jobs              []*job
+	jobs              jobs
 }
 
 type shellStream struct {
@@ -43,6 +44,19 @@ type shellHistory struct {
 	lines      []string
 	startLine  int
 	appendLine int
+}
+
+type jobs struct {
+	jobs  []*job
+	mutex sync.Mutex
+}
+
+type job struct {
+	id        int
+	pid       int
+	command   string
+	status    string
+	hasShowed bool
 }
 
 // Option defines a functional parameter for configuring a Shell instance.
@@ -69,7 +83,6 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		stream:     shellStream{stdin: in, stdout: out, stderr: out},
 		env:        shellEnv{path: os.Getenv("PATH"), histfile: os.Getenv("HISTFILE")},
 		workingDir: wd,
-		jobs:       []*job{},
 	}
 
 	for _, opt := range opts {
@@ -271,30 +284,33 @@ func (s *Shell) startExternalCommand(
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
 
-	jobID := 1
-	for {
-		idExists := false
-		for _, job := range s.jobs {
-			if job.id == jobID {
-				idExists = true
-				break
-			}
-		}
-		if !idExists {
-			break
-		}
-		jobID++
-	}
 	var currentJob *job
 	if isBackground {
-		currentJob = &job{
+		s.jobs.mutex.Lock()
+		jobID := 1
+		for {
+			idExists := false
+			for _, job := range s.jobs.jobs {
+				if job.id == jobID {
+					idExists = true
+					break
+				}
+			}
+			if !idExists {
+				break
+			}
+			jobID++
+		}
+
+		var currentJob = &job{
 			id:        jobID,
 			pid:       cmd.Process.Pid,
 			command:   segment.command + " " + strings.Join(segment.args, " "),
 			status:    "Running",
 			hasShowed: false,
 		}
-		s.jobs = append(s.jobs, currentJob)
+		s.jobs.jobs = append(s.jobs.jobs, currentJob)
+		s.jobs.mutex.Unlock()
 	}
 
 	wg.Add(1)
@@ -303,7 +319,9 @@ func (s *Shell) startExternalCommand(
 		defer wg.Done()
 		_ = c.Wait()
 		if isBackground {
+			s.jobs.mutex.Lock()
 			currentJob.status = "Done"
+			s.jobs.mutex.Unlock()
 		}
 	}(cmd, closers)
 

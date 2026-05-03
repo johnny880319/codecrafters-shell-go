@@ -197,21 +197,15 @@ func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int,
 	return nil
 }
 
-type job struct {
-	id        int
-	pid       int
-	command   string
-	status    string
-	hasShowed bool
-}
-
 func (s *Shell) cmdJobs(_ []string, cmdIO shellStream) error {
 	s.showJobs(cmdIO, false)
 	return nil
 }
 
 func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
-	for i, job := range s.jobs {
+	s.jobs.mutex.Lock()
+	defer s.jobs.mutex.Unlock()
+	for i, job := range s.jobs.jobs {
 		if onlyDone && job.status != "Done" {
 			continue
 		}
@@ -219,10 +213,10 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 			job.hasShowed = true
 		}
 		indicator := " "
-		if i == len(s.jobs)-1 {
+		if i == len(s.jobs.jobs)-1 {
 			indicator = "+"
 		}
-		if i == len(s.jobs)-2 {
+		if i == len(s.jobs.jobs)-2 {
 			indicator = "-"
 		}
 		_, _ = fmt.Fprintf(
@@ -235,10 +229,10 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 		)
 	}
 	newJobs := make([]*job, 0)
-	for _, job := range s.jobs {
+	for _, job := range s.jobs.jobs {
 		if !job.hasShowed {
 			newJobs = append(newJobs, job)
 		}
 	}
-	s.jobs = newJobs
+	s.jobs.jobs = newJobs
 }
