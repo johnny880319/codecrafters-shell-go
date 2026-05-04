@@ -18,13 +18,14 @@ type builtinCommand struct {
 
 func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 	return map[string]builtinCommand{
-		"exit":    {s.cmdExit, false},
-		"echo":    {s.cmdEcho, true},
-		"type":    {s.cmdType, true},
-		"pwd":     {s.cmdPwd, true},
-		"cd":      {s.cmdCd, false},
-		"history": {s.cmdHistory, true},
-		"jobs":    {s.cmdJobs, true},
+		"exit":     {s.cmdExit, false},
+		"echo":     {s.cmdEcho, true},
+		"type":     {s.cmdType, true},
+		"pwd":      {s.cmdPwd, true},
+		"cd":       {s.cmdCd, false},
+		"history":  {s.cmdHistory, true},
+		"jobs":     {s.cmdJobs, true},
+		"complete": {s.cmdComplete, true},
 	}
 }
 
@@ -235,4 +236,9 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 		}
 	}
 	s.jobs.jobs = newJobs
+}
+
+func (s *Shell) cmdComplete(_ []string, _ shellStream) error {
+	// not implemented yet
+	return nil
 }
