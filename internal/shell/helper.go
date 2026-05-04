@@ -17,19 +17,15 @@ func handleQuotesAndEscapes(input string) []string {
 	curField := ""
 	for _, r := range input {
 		if r == ' ' && !inSingleQuotes && !inDoubleQuotes && !escaped {
-			if curField != "" {
-				fields = append(fields, curField)
-				curField = ""
-			}
+			fields = append(fields, curField)
+			curField = ""
 			continue
 		}
 		str, escaped, inSingleQuotes, inDoubleQuotes = parseCharacter(r, escaped, inSingleQuotes, inDoubleQuotes)
 		curField += str
 	}
 
-	if curField != "" {
-		fields = append(fields, curField)
-	}
+	fields = append(fields, curField)
 
 	return fields
 }
@@ -38,10 +34,13 @@ func splitPipeline(input []string) ([][]string, error) {
 	var pipeline [][]string
 	currentCommand := []string{}
 	for _, arg := range input {
-		if arg == "|" {
+		switch arg {
+		case "":
+			continue
+		case "|":
 			pipeline = append(pipeline, currentCommand)
 			currentCommand = []string{}
-		} else {
+		default:
 			currentCommand = append(currentCommand, arg)
 		}
 	}

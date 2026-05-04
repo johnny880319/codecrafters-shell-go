@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/chzyer/readline"
@@ -15,6 +16,7 @@ import (
 
 const prompt = "$ "
 
+// Guards readline.NewEx during parallel test execution.
 var readlineInitMutex sync.Mutex
 
 // Shell represents the core state of the interactive shell.
@@ -24,6 +26,7 @@ type Shell struct {
 	stream            shellStream
 	env               shellEnv
 	history           shellHistory
+	jobs              jobs
 }
 
 type shellStream struct {
@@ -41,6 +44,19 @@ type shellHistory struct {
 	lines      []string
 	startLine  int
 	appendLine int
+}
+
+type jobs struct {
+	jobs  []*job
+	mutex sync.Mutex
+}
+
+type job struct {
+	id        int
+	pid       int
+	command   string
+	status    string
+	hasShowed bool
 }
 
 // Option defines a functional parameter for configuring a Shell instance.
@@ -136,6 +152,7 @@ func (s *Shell) execute(input string) error {
 
 	var wg sync.WaitGroup
 
+	var currentJob *job
 	prevReader := s.stream.stdin
 	for i, pl := range cmdline.pipeline {
 		var (
@@ -155,13 +172,24 @@ func (s *Shell) execute(input string) error {
 			}
 			continue
 		}
-		err = s.startExternalCommand(pl, cmdStream, closers, &wg)
+		path, found := s.findExecutable(pl.command)
+		if !found {
+			_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", pl.command)
+			closeAll(closers)
+			continue
+		}
+		currentJob, err = s.startExternalCommand(path, pl, cmdStream, closers, &wg, cmdline.isBackground)
 		if err != nil {
 			return err
 		}
 	}
 
-	wg.Wait()
+	if cmdline.isBackground {
+		_, _ = fmt.Fprintf(s.stream.stdout, "[%d] %d\n", currentJob.id, currentJob.pid)
+	} else {
+		wg.Wait()
+	}
+	s.showJobs(s.stream, true)
 	return nil
 }
 
@@ -236,17 +264,13 @@ func startBuiltinCommand(
 }
 
 func (s *Shell) startExternalCommand(
+	path string,
 	segment commandSegment,
 	cmdStream shellStream,
 	closers []io.Closer,
 	wg *sync.WaitGroup,
-) error {
-	path, found := s.findExecutable(segment.command)
-	if !found {
-		_, _ = fmt.Fprintf(s.stream.stdout, "%s: command not found\n", segment.command)
-		closeAll(closers)
-		return nil
-	}
+	isBackground bool,
+) (*job, error) {
 	//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
 	cmd := exec.CommandContext(context.Background(), path, segment.args...)
 	cmd.Args[0] = segment.command
@@ -257,7 +281,36 @@ func (s *Shell) startExternalCommand(
 
 	if err := cmd.Start(); err != nil {
 		closeAll(closers)
-		return fmt.Errorf("failed to start command: %w", err)
+		return nil, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	var currentJob *job
+	if isBackground {
+		s.jobs.mutex.Lock()
+		jobID := 1
+		for {
+			idExists := false
+			for _, job := range s.jobs.jobs {
+				if job.id == jobID {
+					idExists = true
+					break
+				}
+			}
+			if !idExists {
+				break
+			}
+			jobID++
+		}
+
+		currentJob = &job{
+			id:        jobID,
+			pid:       cmd.Process.Pid,
+			command:   segment.command + " " + strings.Join(segment.args, " "),
+			status:    "Running",
+			hasShowed: false,
+		}
+		s.jobs.jobs = append(s.jobs.jobs, currentJob)
+		s.jobs.mutex.Unlock()
 	}
 
 	wg.Add(1)
@@ -265,8 +318,14 @@ func (s *Shell) startExternalCommand(
 		defer closeAll(closers)
 		defer wg.Done()
 		_ = c.Wait()
+		if isBackground {
+			s.jobs.mutex.Lock()
+			currentJob.status = "Done"
+			s.jobs.mutex.Unlock()
+		}
 	}(cmd, closers)
-	return nil
+
+	return currentJob, nil
 }
 
 func closeAll(closers []io.Closer) {
@@ -276,7 +335,8 @@ func closeAll(closers []io.Closer) {
 }
 
 type commandLine struct {
-	pipeline []commandSegment
+	pipeline     []commandSegment
+	isBackground bool
 }
 
 type commandSegment struct {
@@ -287,6 +347,11 @@ type commandSegment struct {
 
 func parseInput(input string) (commandLine, error) {
 	cl := commandLine{}
+	input = strings.TrimSpace(input)
+	if len(input) > 0 && input[len(input)-1] == '&' {
+		cl.isBackground = true
+		input = strings.TrimSpace(input[:len(input)-1])
+	}
 	splitedInput := handleQuotesAndEscapes(input)
 	pipelineStr, err := splitPipeline(splitedInput)
 	if err != nil {

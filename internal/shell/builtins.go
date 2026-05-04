@@ -24,6 +24,7 @@ func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 		"pwd":     {s.cmdPwd, true},
 		"cd":      {s.cmdCd, false},
 		"history": {s.cmdHistory, true},
+		"jobs":    {s.cmdJobs, true},
 	}
 }
 
@@ -194,4 +195,44 @@ func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int,
 		return fmt.Errorf("flush history to file: %w", err)
 	}
 	return nil
+}
+
+func (s *Shell) cmdJobs(_ []string, cmdIO shellStream) error {
+	s.showJobs(cmdIO, false)
+	return nil
+}
+
+func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
+	s.jobs.mutex.Lock()
+	defer s.jobs.mutex.Unlock()
+	for i, job := range s.jobs.jobs {
+		if onlyDone && job.status != "Done" {
+			continue
+		}
+		if job.status == "Done" {
+			job.hasShowed = true
+		}
+		indicator := " "
+		if i == len(s.jobs.jobs)-1 {
+			indicator = "+"
+		}
+		if i == len(s.jobs.jobs)-2 {
+			indicator = "-"
+		}
+		_, _ = fmt.Fprintf(
+			cmdIO.stdout,
+			"[%d]%s  %-24s %s\n",
+			job.id,
+			indicator,
+			job.status,
+			job.command,
+		)
+	}
+	newJobs := make([]*job, 0)
+	for _, job := range s.jobs.jobs {
+		if !job.hasShowed {
+			newJobs = append(newJobs, job)
+		}
+	}
+	s.jobs.jobs = newJobs
 }
