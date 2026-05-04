@@ -17,10 +17,8 @@ func handleQuotesAndEscapes(input string) []string {
 	curField := ""
 	for _, r := range input {
 		if r == ' ' && !inSingleQuotes && !inDoubleQuotes && !escaped {
-			if curField != "" {
-				fields = append(fields, curField)
-				curField = ""
-			}
+			fields = append(fields, curField)
+			curField = ""
 			continue
 		}
 		str, escaped, inSingleQuotes, inDoubleQuotes = parseCharacter(r, escaped, inSingleQuotes, inDoubleQuotes)
