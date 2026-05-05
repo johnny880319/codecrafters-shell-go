@@ -273,7 +273,18 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 	return nil
 }
 
-func (s *Shell) cmdDeclare(_ []string, _ shellStream) error {
-	// not implemented yet
+func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
+	if len(args) < 1 {
+		return fmt.Errorf("declare: missing argument")
+	}
+	switch args[0] {
+	case "-p":
+		if len(args) != 2 {
+			return fmt.Errorf("declare: -p option requires exactly 1 argument")
+		}
+		_, _ = fmt.Fprintf(cmdIO.stderr, "declare: %s: not found\n", args[1])
+	default:
+		return fmt.Errorf("declare: unsupported option: %s", args[0])
+	}
 	return nil
 }
