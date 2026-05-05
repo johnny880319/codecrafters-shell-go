@@ -243,9 +243,19 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 		_, _ = fmt.Fprintln(cmdIO.stderr, "complete: missing argument")
 		return nil
 	}
-	if args[0] == "-p" {
+	switch args[0] {
+	case "-C":
+		path := args[1]
+		command := args[2]
+		s.completes[command] = complete{path: path}
+	case "-p":
 		command := args[1]
-		_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
+		complete, found := s.completes[command]
+		if found {
+			_, _ = fmt.Fprintf(cmdIO.stdout, "complete -C '%s' %s\n", complete.path, command)
+		} else {
+			_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
+		}
 	}
 	return nil
 }

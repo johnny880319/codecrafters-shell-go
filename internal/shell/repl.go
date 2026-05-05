@@ -27,6 +27,7 @@ type Shell struct {
 	env               shellEnv
 	history           shellHistory
 	jobs              jobs
+	completes         map[string]complete
 }
 
 type shellStream struct {
@@ -59,6 +60,10 @@ type job struct {
 	hasShowed bool
 }
 
+type complete struct {
+	path string
+}
+
 // Option defines a functional parameter for configuring a Shell instance.
 type Option func(*Shell)
 
@@ -83,6 +88,7 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		stream:     shellStream{stdin: in, stdout: out, stderr: out},
 		env:        shellEnv{path: os.Getenv("PATH"), histfile: os.Getenv("HISTFILE")},
 		workingDir: wd,
+		completes:  make(map[string]complete),
 	}
 
 	for _, opt := range opts {
