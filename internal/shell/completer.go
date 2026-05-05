@@ -1,11 +1,14 @@
 package shell
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 type customCompleter struct {
@@ -93,9 +96,29 @@ func longestCommonPrefix(strs []string) string {
 	return prefix
 }
 
+//nolint:gocognit // Will refactor this function in the future to reduce cognitive complexity.
 func (c *customCompleter) getMatchStrings(lineStr string) []string {
 	var matches []string
 	splitedStr := handleQuotesAndEscapes(lineStr)
+	if len(splitedStr) == 2 && splitedStr[1] == "" {
+		if completion, ok := c.shell.completes[splitedStr[0]]; ok {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			//nolint:gosec // This command is not constructed from user input, so it is not vulnerable to command injection.
+			cmd := exec.CommandContext(ctx, completion.path)
+			output, err := cmd.Output()
+			if err != nil {
+				return nil
+			}
+			for _, line := range strings.Split(string(output), "\n") {
+				if line != "" {
+					matches = append(matches, line)
+				}
+			}
+			return matches
+		}
+	}
+
 	if len(splitedStr) == 1 {
 		for builtin := range c.shell.builtinCommandMap {
 			if strings.HasPrefix(builtin, lineStr) {
