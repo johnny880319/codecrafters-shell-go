@@ -105,26 +105,22 @@ func (c *customCompleter) getMatchStrings(lineStr string) []string {
 	if len(splitedStr) >= 2 {
 		commandName := splitedStr[0]
 		currentWord := splitedStr[len(splitedStr)-1]
-		previousWords := ""
-		if len(splitedStr) >= 3 {
-			previousWords = splitedStr[len(splitedStr)-2]
-		}
+		previousWord := splitedStr[len(splitedStr)-2]
+
 		if completion, ok := c.shell.completes[commandName]; ok {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			//nolint:gosec // This command is not constructed from user input, so it is not vulnerable to command injection.
-			cmd := exec.CommandContext(ctx, completion.path, commandName, currentWord, previousWords)
+			cmd := exec.CommandContext(ctx, completion.path, commandName, currentWord, previousWord)
 			output, err := cmd.Output()
-			if len(output) >= len(currentWord) {
-				output = output[len(currentWord):]
-			}
 			if err != nil {
 				return nil
 			}
 			for _, line := range strings.Split(string(output), "\n") {
-				if line != "" {
-					matches = append(matches, line)
+				if line == "" || !strings.HasPrefix(line, currentWord) {
+					continue
 				}
+				matches = append(matches, line[len(currentWord):])
 			}
 			return matches
 		}
