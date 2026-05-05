@@ -282,9 +282,19 @@ func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 		if len(args) != 2 {
 			return fmt.Errorf("declare: -p option requires exactly 1 argument")
 		}
-		_, _ = fmt.Fprintf(cmdIO.stderr, "declare: %s: not found\n", args[1])
+		name := args[1]
+		value, found := s.declares[name]
+		if found {
+			_, _ = fmt.Fprintf(cmdIO.stdout, "declare -- %s=\"%s\"\n", name, value)
+		} else {
+			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: %s: not found\n", name)
+		}
 	default:
-		return fmt.Errorf("declare: unsupported option: %s", args[0])
+		parts := strings.SplitN(args[0], "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("declare: invalid argument: %s", args[0])
+		}
+		s.declares[parts[0]] = parts[1]
 	}
 	return nil
 }
