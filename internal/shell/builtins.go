@@ -239,19 +239,28 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 }
 
 func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
-	if len(args) < 2 {
+	if len(args) < 1 {
 		_, _ = fmt.Fprintln(cmdIO.stderr, "complete: missing argument")
 		return nil
 	}
 	switch args[0] {
 	case "-C":
+		if len(args) != 3 {
+			return fmt.Errorf("complete: -C option requires exactly 2 arguments")
+		}
 		path := args[1]
 		command := args[2]
 		s.completers[command] = path
 	case "-r":
+		if len(args) != 2 {
+			return fmt.Errorf("complete: -r option requires exactly 1 argument")
+		}
 		command := args[1]
 		delete(s.completers, command)
 	case "-p":
+		if len(args) != 2 {
+			return fmt.Errorf("complete: -p option requires exactly 1 argument")
+		}
 		command := args[1]
 		path, found := s.completers[command]
 		if found {
