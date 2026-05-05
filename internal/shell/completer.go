@@ -18,6 +18,8 @@ type customCompleter struct {
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	_ = os.Setenv("COMP_LINE", string(line))
+	_ = os.Setenv("COMP_POINT", fmt.Sprintf("%d", pos))
 	lineStr := string(line[:pos])
 	matches := c.getMatchStrings(lineStr)
 
