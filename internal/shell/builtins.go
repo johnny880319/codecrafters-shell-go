@@ -26,6 +26,7 @@ func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 		"history":  {s.cmdHistory, true},
 		"jobs":     {s.cmdJobs, true},
 		"complete": {s.cmdComplete, true},
+		"declare":  {s.cmdDeclare, true},
 	}
 }
 
@@ -269,5 +270,10 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 			_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
 		}
 	}
+	return nil
+}
+
+func (s *Shell) cmdDeclare(_ []string, _ shellStream) error {
+	// not implemented yet
 	return nil
 }
