@@ -107,11 +107,11 @@ func (c *customCompleter) getMatchStrings(lineStr string) []string {
 		currentWord := splitedStr[len(splitedStr)-1]
 		previousWord := splitedStr[len(splitedStr)-2]
 
-		if completion, ok := c.shell.completes[commandName]; ok {
+		if completer, ok := c.shell.completers[commandName]; ok {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			//nolint:gosec // This command is not constructed from user input, so it is not vulnerable to command injection.
-			cmd := exec.CommandContext(ctx, completion.path, commandName, currentWord, previousWord)
+			cmd := exec.CommandContext(ctx, completer, commandName, currentWord, previousWord)
 			output, err := cmd.Output()
 			if err != nil {
 				return nil

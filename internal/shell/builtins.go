@@ -247,15 +247,15 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 	case "-C":
 		path := args[1]
 		command := args[2]
-		s.completes[command] = complete{path: path}
+		s.completers[command] = path
 	case "-r":
 		command := args[1]
-		delete(s.completes, command)
+		delete(s.completers, command)
 	case "-p":
 		command := args[1]
-		complete, found := s.completes[command]
+		path, found := s.completers[command]
 		if found {
-			_, _ = fmt.Fprintf(cmdIO.stdout, "complete -C '%s' %s\n", complete.path, command)
+			_, _ = fmt.Fprintf(cmdIO.stdout, "complete -C '%s' %s\n", path, command)
 		} else {
 			_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
 		}
