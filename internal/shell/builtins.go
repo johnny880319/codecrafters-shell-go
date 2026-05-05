@@ -294,6 +294,11 @@ func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 		if len(parts) != 2 {
 			return fmt.Errorf("declare: invalid argument: %s", args[0])
 		}
+		name, value := parts[0], parts[1]
+		if name[0] != '_' && (name[0] < 'a' || name[0] > 'z') && (name[0] < 'A' || name[0] > 'Z') {
+			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: '%s=%s': not a valid identifier\n", name, value)
+			return nil
+		}
 		s.declares[parts[0]] = parts[1]
 	}
 	return nil
