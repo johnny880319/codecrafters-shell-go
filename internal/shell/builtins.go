@@ -238,7 +238,14 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 	s.jobs.jobs = newJobs
 }
 
-func (s *Shell) cmdComplete(_ []string, _ shellStream) error {
-	// not implemented yet
+func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
+	if len(args) < 2 {
+		_, _ = fmt.Fprintln(cmdIO.stderr, "complete: missing argument")
+		return nil
+	}
+	if args[0] == "-p" {
+		command := args[1]
+		_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
+	}
 	return nil
 }
