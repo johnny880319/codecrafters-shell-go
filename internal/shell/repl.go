@@ -27,6 +27,7 @@ type Shell struct {
 	env               shellEnv
 	history           shellHistory
 	jobs              jobs
+	completers        map[string]string
 }
 
 type shellStream struct {
@@ -83,6 +84,7 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		stream:     shellStream{stdin: in, stdout: out, stderr: out},
 		env:        shellEnv{path: os.Getenv("PATH"), histfile: os.Getenv("HISTFILE")},
 		workingDir: wd,
+		completers: make(map[string]string),
 	}
 
 	for _, opt := range opts {

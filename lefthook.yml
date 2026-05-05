@@ -11,6 +11,9 @@ pre-commit:
       glob: "**/*.go"
       run: golangci-lint run --fix
       stage_fixed: true
+    go-test:
+      glob: "**/*.go"
+      run: go test -short ./...
 
 
 pre-push:

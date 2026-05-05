@@ -1,11 +1,14 @@
 package shell
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 type customCompleter struct {
@@ -15,6 +18,8 @@ type customCompleter struct {
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	_ = os.Setenv("COMP_LINE", string(line))
+	_ = os.Setenv("COMP_POINT", fmt.Sprintf("%d", pos))
 	lineStr := string(line[:pos])
 	matches := c.getMatchStrings(lineStr)
 
@@ -94,8 +99,13 @@ func longestCommonPrefix(strs []string) string {
 }
 
 func (c *customCompleter) getMatchStrings(lineStr string) []string {
-	var matches []string
 	splitedStr := handleQuotesAndEscapes(lineStr)
+	matches := c.findProgrammableCompletions(splitedStr)
+	if len(matches) > 0 {
+		slices.Sort(matches)
+		return slices.Compact(matches)
+	}
+
 	if len(splitedStr) == 1 {
 		for builtin := range c.shell.builtinCommandMap {
 			if strings.HasPrefix(builtin, lineStr) {
@@ -117,6 +127,34 @@ func (c *customCompleter) getMatchStrings(lineStr string) []string {
 	}
 	slices.Sort(matches)
 	return slices.Compact(matches)
+}
+
+func (c *customCompleter) findProgrammableCompletions(splitedStr []string) []string {
+	if len(splitedStr) < 2 {
+		return nil
+	}
+	var matches []string
+	commandName := splitedStr[0]
+	currentWord := splitedStr[len(splitedStr)-1]
+	previousWord := splitedStr[len(splitedStr)-2]
+
+	if completer, ok := c.shell.completers[commandName]; ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		//nolint:gosec // This command is not constructed from user input, so it is not vulnerable to command injection.
+		cmd := exec.CommandContext(ctx, completer, commandName, currentWord, previousWord)
+		output, err := cmd.Output()
+		if err != nil {
+			return nil
+		}
+		for _, line := range strings.Split(string(output), "\n") {
+			if line == "" || !strings.HasPrefix(line, currentWord) {
+				continue
+			}
+			matches = append(matches, line[len(currentWord):])
+		}
+	}
+	return matches
 }
 
 func (c *customCompleter) findPrefixExecutables(prefix string) []string {

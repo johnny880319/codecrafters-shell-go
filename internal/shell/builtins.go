@@ -18,13 +18,14 @@ type builtinCommand struct {
 
 func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 	return map[string]builtinCommand{
-		"exit":    {s.cmdExit, false},
-		"echo":    {s.cmdEcho, true},
-		"type":    {s.cmdType, true},
-		"pwd":     {s.cmdPwd, true},
-		"cd":      {s.cmdCd, false},
-		"history": {s.cmdHistory, true},
-		"jobs":    {s.cmdJobs, true},
+		"exit":     {s.cmdExit, false},
+		"echo":     {s.cmdEcho, true},
+		"type":     {s.cmdType, true},
+		"pwd":      {s.cmdPwd, true},
+		"cd":       {s.cmdCd, false},
+		"history":  {s.cmdHistory, true},
+		"jobs":     {s.cmdJobs, true},
+		"complete": {s.cmdComplete, true},
 	}
 }
 
@@ -235,4 +236,38 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 		}
 	}
 	s.jobs.jobs = newJobs
+}
+
+func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
+	if len(args) < 1 {
+		_, _ = fmt.Fprintln(cmdIO.stderr, "complete: missing argument")
+		return nil
+	}
+	switch args[0] {
+	case "-C":
+		if len(args) != 3 {
+			return fmt.Errorf("complete: -C option requires exactly 2 arguments")
+		}
+		path := args[1]
+		command := args[2]
+		s.completers[command] = path
+	case "-r":
+		if len(args) != 2 {
+			return fmt.Errorf("complete: -r option requires exactly 1 argument")
+		}
+		command := args[1]
+		delete(s.completers, command)
+	case "-p":
+		if len(args) != 2 {
+			return fmt.Errorf("complete: -p option requires exactly 1 argument")
+		}
+		command := args[1]
+		path, found := s.completers[command]
+		if found {
+			_, _ = fmt.Fprintf(cmdIO.stdout, "complete -C '%s' %s\n", path, command)
+		} else {
+			_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
+		}
+	}
+	return nil
 }
