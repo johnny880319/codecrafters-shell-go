@@ -32,17 +32,41 @@ func handleQuotesAndEscapes(input string) []string {
 
 func (s *Shell) replaceVariables(splitedInput []string) []string {
 	for i, arg := range splitedInput {
-		idx := strings.Index(arg, "$")
-		if idx != -1 && len(arg) > 1 {
-			varName := arg[idx+1:]
+		replacedArg := ""
+		cursor := 0
+		for {
+			idx := strings.Index(arg[cursor:], "$")
+			if idx == -1 {
+				replacedArg += arg[cursor:]
+				break
+			}
+			replacedArg += arg[cursor : cursor+idx]
+			cursor += idx + 1
+			var end int
+			if arg[cursor] != '{' {
+				end = len(arg)
+			} else {
+				cursor++
+				end = strings.Index(arg[cursor:], "}")
+				if end == -1 {
+					end = len(arg)
+				}
+				end += cursor
+			}
+			varName := arg[cursor:end]
 			var varvalue string
 			if value, ok := s.declares[varName]; ok {
 				varvalue = value
 			} else {
 				varvalue = ""
 			}
-			splitedInput[i] = arg[:idx] + varvalue
+			replacedArg += varvalue
+			cursor = end + 1
+			if cursor >= len(arg) {
+				break
+			}
 		}
+		splitedInput[i] = replacedArg
 	}
 	return splitedInput
 }
