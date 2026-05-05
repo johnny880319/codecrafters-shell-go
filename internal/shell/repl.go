@@ -149,7 +149,7 @@ func (s *Shell) Repl() error {
 
 func (s *Shell) execute(input string) error {
 	s.history.lines = append(s.history.lines, input)
-	cmdline, err := parseInput(input)
+	cmdline, err := s.parseInput(input)
 	if err != nil {
 		return err
 	}
@@ -349,7 +349,7 @@ type commandSegment struct {
 	redirects []redirect
 }
 
-func parseInput(input string) (commandLine, error) {
+func (s *Shell) parseInput(input string) (commandLine, error) {
 	cl := commandLine{}
 	input = strings.TrimSpace(input)
 	if len(input) > 0 && input[len(input)-1] == '&' {
@@ -357,6 +357,7 @@ func parseInput(input string) (commandLine, error) {
 		input = strings.TrimSpace(input[:len(input)-1])
 	}
 	splitedInput := handleQuotesAndEscapes(input)
+	splitedInput = s.replaceVariables(splitedInput)
 	pipelineStr, err := splitPipeline(splitedInput)
 	if err != nil {
 		return cl, err

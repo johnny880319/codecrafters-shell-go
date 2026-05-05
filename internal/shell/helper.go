@@ -30,6 +30,23 @@ func handleQuotesAndEscapes(input string) []string {
 	return fields
 }
 
+func (s *Shell) replaceVariables(splitedInput []string) []string {
+	for i, arg := range splitedInput {
+		idx := strings.Index(arg, "$")
+		if idx != -1 && len(arg) > 1 {
+			varName := arg[idx+1:]
+			var varvalue string
+			if value, ok := s.declares[varName]; ok {
+				varvalue = value
+			} else {
+				varvalue = ""
+			}
+			splitedInput[i] = arg[:idx] + varvalue
+		}
+	}
+	return splitedInput
+}
+
 func splitPipeline(input []string) ([][]string, error) {
 	var pipeline [][]string
 	currentCommand := []string{}
