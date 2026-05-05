@@ -248,6 +248,9 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 		path := args[1]
 		command := args[2]
 		s.completes[command] = complete{path: path}
+	case "-r":
+		command := args[1]
+		delete(s.completes, command)
 	case "-p":
 		command := args[1]
 		complete, found := s.completes[command]
