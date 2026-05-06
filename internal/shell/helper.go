@@ -30,6 +30,7 @@ func handleQuotesAndEscapes(input string) []string {
 	return fields
 }
 
+//nolint:gocognit // Will refactor this function later.
 func (s *Shell) replaceVariables(splitedInput []string) []string {
 	for i, arg := range splitedInput {
 		replacedArg := ""
@@ -42,9 +43,17 @@ func (s *Shell) replaceVariables(splitedInput []string) []string {
 			}
 			replacedArg += arg[cursor : cursor+idx]
 			cursor += idx + 1
+			if cursor >= len(arg) {
+				break
+			}
 			var end int
 			if arg[cursor] != '{' {
-				end = len(arg)
+				idx := strings.Index(arg[cursor:], ".")
+				if idx == -1 {
+					end = len(arg)
+				} else {
+					end = cursor + idx
+				}
 			} else {
 				cursor++
 				end = strings.Index(arg[cursor:], "}")
