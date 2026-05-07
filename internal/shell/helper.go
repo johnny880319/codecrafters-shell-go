@@ -87,12 +87,22 @@ func computeReplaceRange(token string, cursor int) (int, int, error) {
 		return cursor, cursor + end, nil
 	}
 
-	idx := strings.Index(token[cursor:], ".")
-	if idx == -1 {
-		return cursor, len(token), nil
-	} else {
-		return cursor, cursor + idx, nil
+	end := cursor
+	if token[cursor] != '_' &&
+		(token[cursor] < 'a' || token[cursor] > 'z') &&
+		(token[cursor] < 'A' || token[cursor] > 'Z') {
+		return 0, 0, fmt.Errorf("syntax error: invalid variable name")
 	}
+	end++
+
+	for end < len(token) && (token[end] == '_' ||
+		(token[end] >= 'a' && token[end] <= 'z') ||
+		(token[end] >= 'A' && token[end] <= 'Z') ||
+		(token[end] >= '0' && token[end] <= '9')) {
+		end++
+	}
+
+	return cursor, end, nil
 }
 
 func splitPipeline(input []string) ([][]string, error) {

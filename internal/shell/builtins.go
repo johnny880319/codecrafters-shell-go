@@ -26,7 +26,7 @@ func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 		"history":  {s.cmdHistory, true},
 		"jobs":     {s.cmdJobs, true},
 		"complete": {s.cmdComplete, true},
-		"declare":  {s.cmdDeclare, true},
+		"declare":  {s.cmdDeclare, false},
 	}
 }
 
@@ -311,6 +311,9 @@ func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 }
 
 func isValidIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
 	for i, ch := range name {
 		if i == 0 && ch != '_' && (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') {
 			return false
