@@ -30,6 +30,85 @@ func handleQuotesAndEscapes(input string) []string {
 	return fields
 }
 
+func (s *Shell) expandVariables(splitedInput []string) ([]string, error) {
+	for i, token := range splitedInput {
+		replacedArg, err := s.expandTokenVariables(token)
+		if err != nil {
+			return nil, err
+		}
+		splitedInput[i] = replacedArg
+	}
+	return splitedInput, nil
+}
+
+func (s *Shell) expandTokenVariables(token string) (string, error) {
+	replacedArg := ""
+	cursor := 0
+	for {
+		idx := strings.Index(token[cursor:], "$")
+		if idx == -1 {
+			replacedArg += token[cursor:]
+			break
+		}
+		replacedArg += token[cursor : cursor+idx]
+		cursor += idx + 1
+		if cursor >= len(token) {
+			break
+		}
+		replacedValue, nextCursor, err := s.expandVariableAt(token, cursor)
+		if err != nil {
+			return "", err
+		}
+
+		replacedArg += replacedValue
+		cursor = nextCursor
+		if cursor >= len(token) {
+			break
+		}
+	}
+	return replacedArg, nil
+}
+
+func (s *Shell) expandVariableAt(token string, cursor int) (string, int, error) {
+	var replaced string
+	var nextCursor int
+	if token[cursor] == '{' {
+		cursor++
+		end := strings.Index(token[cursor:], "}")
+		if end == -1 {
+			return "", 0, fmt.Errorf("syntax error: missing `}'")
+		}
+		replaced = token[cursor : cursor+end]
+		nextCursor = cursor + end + 1
+	} else {
+		end := cursor
+		if !isIdentifierStart(token[cursor]) {
+			return "", 0, fmt.Errorf("syntax error: invalid variable name")
+		}
+		end++
+
+		for end < len(token) && isIdentifierPart(token[end]) {
+			end++
+		}
+		replaced = token[cursor:end]
+		nextCursor = end
+	}
+
+	if value, ok := s.variables[replaced]; ok {
+		return value, nextCursor, nil
+	} else {
+		return "", nextCursor, nil
+	}
+}
+
+func isIdentifierStart(ch byte) bool {
+	return ch == '_' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+}
+
+func isIdentifierPart(ch byte) bool {
+	return isIdentifierStart(ch) || (ch >= '0' && ch <= '9')
+}
+
 func splitPipeline(input []string) ([][]string, error) {
 	var pipeline [][]string
 	currentCommand := []string{}

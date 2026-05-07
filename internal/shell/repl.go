@@ -28,6 +28,7 @@ type Shell struct {
 	history           shellHistory
 	jobs              jobs
 	completers        map[string]string
+	variables         map[string]string
 }
 
 type shellStream struct {
@@ -85,6 +86,7 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		env:        shellEnv{path: os.Getenv("PATH"), histfile: os.Getenv("HISTFILE")},
 		workingDir: wd,
 		completers: make(map[string]string),
+		variables:  make(map[string]string),
 	}
 
 	for _, opt := range opts {
@@ -147,7 +149,7 @@ func (s *Shell) Repl() error {
 
 func (s *Shell) execute(input string) error {
 	s.history.lines = append(s.history.lines, input)
-	cmdline, err := parseInput(input)
+	cmdline, err := s.parseInput(input)
 	if err != nil {
 		return err
 	}
@@ -347,7 +349,7 @@ type commandSegment struct {
 	redirects []redirect
 }
 
-func parseInput(input string) (commandLine, error) {
+func (s *Shell) parseInput(input string) (commandLine, error) {
 	cl := commandLine{}
 	input = strings.TrimSpace(input)
 	if len(input) > 0 && input[len(input)-1] == '&' {
@@ -355,6 +357,10 @@ func parseInput(input string) (commandLine, error) {
 		input = strings.TrimSpace(input[:len(input)-1])
 	}
 	splitedInput := handleQuotesAndEscapes(input)
+	splitedInput, err := s.expandVariables(splitedInput)
+	if err != nil {
+		return commandLine{}, err
+	}
 	pipelineStr, err := splitPipeline(splitedInput)
 	if err != nil {
 		return cl, err

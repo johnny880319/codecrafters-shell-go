@@ -26,6 +26,7 @@ func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 		"history":  {s.cmdHistory, true},
 		"jobs":     {s.cmdJobs, true},
 		"complete": {s.cmdComplete, true},
+		"declare":  {s.cmdDeclare, false},
 	}
 }
 
@@ -246,20 +247,23 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 	switch args[0] {
 	case "-C":
 		if len(args) != 3 {
-			return fmt.Errorf("complete: -C option requires exactly 2 arguments")
+			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -C option requires exactly 2 arguments")
+			return nil
 		}
 		path := args[1]
 		command := args[2]
 		s.completers[command] = path
 	case "-r":
 		if len(args) != 2 {
-			return fmt.Errorf("complete: -r option requires exactly 1 argument")
+			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -r option requires exactly 1 argument")
+			return nil
 		}
 		command := args[1]
 		delete(s.completers, command)
 	case "-p":
 		if len(args) != 2 {
-			return fmt.Errorf("complete: -p option requires exactly 1 argument")
+			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -p option requires exactly 1 argument")
+			return nil
 		}
 		command := args[1]
 		path, found := s.completers[command]
@@ -268,6 +272,46 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 		} else {
 			_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
 		}
+	}
+	return nil
+}
+
+func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
+	if len(args) < 1 {
+		_, _ = fmt.Fprintln(cmdIO.stderr, "declare: missing argument")
+		return nil
+	}
+	switch args[0] {
+	case "-p":
+		if len(args) != 2 {
+			_, _ = fmt.Fprintln(cmdIO.stderr, "declare: -p option requires exactly 1 argument")
+			return nil
+		}
+		name := args[1]
+		value, found := s.variables[name]
+		if found {
+			_, _ = fmt.Fprintf(cmdIO.stdout, "declare -- %s=\"%s\"\n", name, value)
+		} else {
+			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: %s: not found\n", name)
+		}
+	default:
+		parts := strings.SplitN(args[0], "=", 2)
+		if len(parts) != 2 {
+			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: invalid argument: %s\n", args[0])
+			return nil
+		}
+		name, value := parts[0], parts[1]
+		if name == "" || !isIdentifierStart(name[0]) {
+			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
+			return nil
+		}
+		for i := 1; i < len(name); i++ {
+			if !isIdentifierPart(name[i]) {
+				_, _ = fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
+				return nil
+			}
+		}
+		s.variables[name] = value
 	}
 	return nil
 }
