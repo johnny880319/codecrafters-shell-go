@@ -339,12 +339,14 @@ func TestVariableReplacement(t *testing.T) {
 		t,
 		strings.Join([]string{
 			"declare pineapple=raspberry\n",
-			"echo ${missing_var_6}_suffix ${pineapple} ${missing_var_4} $missing_var_8\n",
+			"declare hello=world\n",
+			"echo ${missing_var_6}_suffix ${pineapple} ${missing_var_4} $missing_var_8 $hello.txt\n",
 		}, ""),
 		strings.Join([]string{
 			"$ ",
 			"$ ",
-			"_suffix raspberry\n",
+			"$ ",
+			"_suffix raspberry world.txt\n",
 			"$ ",
 		}, ""),
 	)

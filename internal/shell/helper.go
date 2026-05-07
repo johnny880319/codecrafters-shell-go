@@ -55,21 +55,13 @@ func (s *Shell) replaceToken(token string) (string, error) {
 		if cursor >= len(token) {
 			break
 		}
-		newCursor, end, err := computeReplaceRange(token, cursor)
+		replacedValue, nextCursor, err := s.computeReplaceRange(token, cursor)
 		if err != nil {
 			return "", err
 		}
-		cursor = newCursor
 
-		varName := token[cursor:end]
-		var varvalue string
-		if value, ok := s.declares[varName]; ok {
-			varvalue = value
-		} else {
-			varvalue = ""
-		}
-		replacedArg += varvalue
-		cursor = end + 1
+		replacedArg += replacedValue
+		cursor = nextCursor
 		if cursor >= len(token) {
 			break
 		}
@@ -77,26 +69,36 @@ func (s *Shell) replaceToken(token string) (string, error) {
 	return replacedArg, nil
 }
 
-func computeReplaceRange(token string, cursor int) (int, int, error) {
+func (s *Shell) computeReplaceRange(token string, cursor int) (string, int, error) {
+	var replaced string
+	var nextCursor int
 	if token[cursor] == '{' {
 		cursor++
 		end := strings.Index(token[cursor:], "}")
 		if end == -1 {
-			return 0, 0, fmt.Errorf("syntax error: missing `}'")
+			return "", 0, fmt.Errorf("syntax error: missing `}'")
 		}
-		return cursor, cursor + end, nil
-	}
-
-	end := cursor
-	if !isIdentifierStart(token[cursor]) {
-		return 0, 0, fmt.Errorf("syntax error: invalid variable name")
-	}
-	end++
-
-	for end < len(token) && isIdentifierPart(token[end]) {
+		replaced = token[cursor : cursor+end]
+		nextCursor = cursor + end + 1
+	} else {
+		end := cursor
+		if !isIdentifierStart(token[cursor]) {
+			return "", 0, fmt.Errorf("syntax error: invalid variable name")
+		}
 		end++
+
+		for end < len(token) && isIdentifierPart(token[end]) {
+			end++
+		}
+		replaced = token[cursor:end]
+		nextCursor = end
 	}
-	return cursor, end, nil
+
+	if value, ok := s.declares[replaced]; ok {
+		return value, nextCursor, nil
+	} else {
+		return "", nextCursor, nil
+	}
 }
 
 func isIdentifierStart(ch byte) bool {

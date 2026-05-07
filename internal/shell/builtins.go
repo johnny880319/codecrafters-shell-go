@@ -301,7 +301,7 @@ func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 			return nil
 		}
 		name, value := parts[0], parts[1]
-		if !isIdentifierStart(name[0]) {
+		if name == "" || !isIdentifierStart(name[0]) {
 			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
 			return nil
 		}
