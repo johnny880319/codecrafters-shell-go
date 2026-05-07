@@ -30,9 +30,9 @@ func handleQuotesAndEscapes(input string) []string {
 	return fields
 }
 
-func (s *Shell) replaceVariables(splitedInput []string) ([]string, error) {
+func (s *Shell) expandVariables(splitedInput []string) ([]string, error) {
 	for i, token := range splitedInput {
-		replacedArg, err := s.replaceToken(token)
+		replacedArg, err := s.expandTokenVariables(token)
 		if err != nil {
 			return nil, err
 		}
@@ -41,7 +41,7 @@ func (s *Shell) replaceVariables(splitedInput []string) ([]string, error) {
 	return splitedInput, nil
 }
 
-func (s *Shell) replaceToken(token string) (string, error) {
+func (s *Shell) expandTokenVariables(token string) (string, error) {
 	replacedArg := ""
 	cursor := 0
 	for {
@@ -55,7 +55,7 @@ func (s *Shell) replaceToken(token string) (string, error) {
 		if cursor >= len(token) {
 			break
 		}
-		replacedValue, nextCursor, err := s.computeReplaceRange(token, cursor)
+		replacedValue, nextCursor, err := s.expandVariableAt(token, cursor)
 		if err != nil {
 			return "", err
 		}
@@ -69,7 +69,7 @@ func (s *Shell) replaceToken(token string) (string, error) {
 	return replacedArg, nil
 }
 
-func (s *Shell) computeReplaceRange(token string, cursor int) (string, int, error) {
+func (s *Shell) expandVariableAt(token string, cursor int) (string, int, error) {
 	var replaced string
 	var nextCursor int
 	if token[cursor] == '{' {
@@ -94,7 +94,7 @@ func (s *Shell) computeReplaceRange(token string, cursor int) (string, int, erro
 		nextCursor = end
 	}
 
-	if value, ok := s.declares[replaced]; ok {
+	if value, ok := s.variables[replaced]; ok {
 		return value, nextCursor, nil
 	} else {
 		return "", nextCursor, nil

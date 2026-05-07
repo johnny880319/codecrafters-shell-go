@@ -288,7 +288,7 @@ func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 			return nil
 		}
 		name := args[1]
-		value, found := s.declares[name]
+		value, found := s.variables[name]
 		if found {
 			_, _ = fmt.Fprintf(cmdIO.stdout, "declare -- %s=\"%s\"\n", name, value)
 		} else {
@@ -311,7 +311,7 @@ func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 				return nil
 			}
 		}
-		s.declares[name] = value
+		s.variables[name] = value
 	}
 	return nil
 }
