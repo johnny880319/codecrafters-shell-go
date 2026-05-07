@@ -29,28 +29,37 @@ func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 }
 
 func (s *Shell) cmdExit(_ []string, _ shellStream) error {
-	_ = s.writeHistoryToFile(s.env.histfile, s.stream, os.O_APPEND, s.history.startLine)
+	err := s.writeHistoryToFile(s.env.histfile, s.stream, os.O_APPEND, s.history.startLine)
+	if err != nil {
+		_, err := fmt.Fprintf(s.stream.stderr, "failed to save history: %v\n", err)
+		if err != nil {
+			return fmt.Errorf("fail to write to stderr: %w", err)
+		}
+	}
 	return io.EOF
 }
 
 func (s *Shell) cmdEcho(args []string, cmdIO shellStream) error {
 	_, err := fmt.Fprintln(cmdIO.stdout, strings.Join(args, " "))
-	return err
+	if err != nil {
+		return fmt.Errorf("fail to write to stdout: %w", err)
+	}
+	return nil
 }
 
 func (s *Shell) cmdType(args []string, cmdIO shellStream) error {
 	for _, arg := range args {
 		if _, ok := s.builtinCommandMap[arg]; ok {
 			if _, err := fmt.Fprintf(cmdIO.stdout, "%s is a shell builtin\n", arg); err != nil {
-				return err
+				return fmt.Errorf("fail to write to stdout: %w", err)
 			}
 		} else if path, found := s.findExecutable(arg); found {
 			if _, err := fmt.Fprintf(cmdIO.stdout, "%s is %s\n", arg, path); err != nil {
-				return err
+				return fmt.Errorf("fail to write to stdout: %w", err)
 			}
 		} else {
 			if _, err := fmt.Fprintf(cmdIO.stderr, "%s: not found\n", arg); err != nil {
-				return err
+				return fmt.Errorf("fail to write to stderr: %w", err)
 			}
 		}
 	}
@@ -59,7 +68,10 @@ func (s *Shell) cmdType(args []string, cmdIO shellStream) error {
 
 func (s *Shell) cmdPwd(_ []string, cmdIO shellStream) error {
 	_, err := fmt.Fprintln(cmdIO.stdout, s.workingDir)
-	return err
+	if err != nil {
+		return fmt.Errorf("fail to write to stdout: %w", err)
+	}
+	return nil
 }
 
 func (s *Shell) cmdCd(args []string, cmdIO shellStream) error {
@@ -69,7 +81,10 @@ func (s *Shell) cmdCd(args []string, cmdIO shellStream) error {
 	}
 	if len(args) > 1 {
 		_, err := fmt.Fprintln(cmdIO.stderr, "cd: too many arguments")
-		return err
+		if err != nil {
+			return fmt.Errorf("fail to write to stderr: %w", err)
+		}
+		return nil
 	}
 
 	newPath := args[0]
@@ -96,8 +111,11 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 
 	if len(args) > 0 && args[0] == "-a" {
 		err := s.writeHistoryToFile(args[1], cmdIO, os.O_APPEND, s.history.appendLine)
+		if err != nil {
+			return fmt.Errorf("history: %w", err)
+		}
 		s.history.appendLine = len(s.history.lines)
-		return err
+		return nil
 	}
 
 	start := 1
@@ -106,7 +124,7 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 		n, err := strconv.Atoi(args[0])
 		if err != nil {
 			if _, err := fmt.Fprintf(cmdIO.stderr, "history: %s: numeric argument required\n", args[0]); err != nil {
-				return err
+				return fmt.Errorf("fail to write to stderr: %w", err)
 			}
 			return nil
 		}
@@ -116,7 +134,7 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 
 	for i, cmd := range s.history.lines[start-1:] {
 		if _, err := fmt.Fprintf(cmdIO.stdout, "%d %s\n", i+start, cmd); err != nil {
-			return err
+			return fmt.Errorf("fail to write to stdout: %w", err)
 		}
 	}
 
@@ -128,15 +146,22 @@ func (s *Shell) cmdJobs(_ []string, cmdIO shellStream) error {
 	return nil
 }
 
+//nolint:gocognit // Will refactor this function in the future.
 func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 	if len(args) < 1 {
-		_, _ = fmt.Fprintln(cmdIO.stderr, "complete: missing argument")
+		_, err := fmt.Fprintln(cmdIO.stderr, "complete: missing argument")
+		if err != nil {
+			return fmt.Errorf("fail to write to stderr: %w", err)
+		}
 		return nil
 	}
 	switch args[0] {
 	case "-C":
 		if len(args) != 3 {
-			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -C option requires exactly 2 arguments")
+			_, err := fmt.Fprintln(cmdIO.stderr, "complete: -C option requires exactly 2 arguments")
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 			return nil
 		}
 		path := args[1]
@@ -144,59 +169,93 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 		s.completers[command] = path
 	case "-r":
 		if len(args) != 2 {
-			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -r option requires exactly 1 argument")
+			_, err := fmt.Fprintln(cmdIO.stderr, "complete: -r option requires exactly 1 argument")
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 			return nil
 		}
 		command := args[1]
 		delete(s.completers, command)
 	case "-p":
 		if len(args) != 2 {
-			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -p option requires exactly 1 argument")
+			_, err := fmt.Fprintln(cmdIO.stderr, "complete: -p option requires exactly 1 argument")
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 			return nil
 		}
 		command := args[1]
 		path, found := s.completers[command]
 		if found {
-			_, _ = fmt.Fprintf(cmdIO.stdout, "complete -C '%s' %s\n", path, command)
+			_, err := fmt.Fprintf(cmdIO.stdout, "complete -C '%s' %s\n", path, command)
+			if err != nil {
+				return fmt.Errorf("fail to write to stdout: %w", err)
+			}
 		} else {
-			_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
+			_, err := fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 		}
 	}
 	return nil
 }
 
+//nolint:gocognit // Will refactor this function in the future.
 func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 	if len(args) < 1 {
-		_, _ = fmt.Fprintln(cmdIO.stderr, "declare: missing argument")
+		_, err := fmt.Fprintln(cmdIO.stderr, "declare: missing argument")
+		if err != nil {
+			return fmt.Errorf("fail to write to stderr: %w", err)
+		}
 		return nil
 	}
 	switch args[0] {
 	case "-p":
 		if len(args) != 2 {
-			_, _ = fmt.Fprintln(cmdIO.stderr, "declare: -p option requires exactly 1 argument")
+			_, err := fmt.Fprintln(cmdIO.stderr, "declare: -p option requires exactly 1 argument")
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 			return nil
 		}
 		name := args[1]
 		value, found := s.variables[name]
 		if found {
-			_, _ = fmt.Fprintf(cmdIO.stdout, "declare -- %s=\"%s\"\n", name, value)
+			_, err := fmt.Fprintf(cmdIO.stdout, "declare -- %s=\"%s\"\n", name, value)
+			if err != nil {
+				return fmt.Errorf("fail to write to stdout: %w", err)
+			}
 		} else {
-			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: %s: not found\n", name)
+			_, err := fmt.Fprintf(cmdIO.stderr, "declare: %s: not found\n", name)
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 		}
 	default:
 		parts := strings.SplitN(args[0], "=", 2)
 		if len(parts) != 2 {
-			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: invalid argument: %s\n", args[0])
+			_, err := fmt.Fprintf(cmdIO.stderr, "declare: invalid argument: %s\n", args[0])
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 			return nil
 		}
 		name, value := parts[0], parts[1]
 		if name == "" || !isIdentifierStart(name[0]) {
-			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
+			_, err := fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 			return nil
 		}
 		for i := 1; i < len(name); i++ {
 			if !isIdentifierPart(name[i]) {
-				_, _ = fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
+				_, err := fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
+				if err != nil {
+					return fmt.Errorf("fail to write to stderr: %w", err)
+				}
 				return nil
 			}
 		}

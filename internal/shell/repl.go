@@ -62,10 +62,10 @@ type shellJob struct {
 }
 
 // NewShell creates a new Shell instance with default OS environment variables.
-func NewShell(in io.Reader, out io.Writer) *Shell {
+func NewShell(in io.Reader, out io.Writer) (*Shell, error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		wd = "/"
+		return nil, fmt.Errorf("get working directory: %w", err)
 	}
 
 	s := &Shell{
@@ -78,12 +78,13 @@ func NewShell(in io.Reader, out io.Writer) *Shell {
 
 	s.builtinCommandMap = s.getCommandFuncMap()
 	if err := s.readHistoryFromFile(s.env.histfile, s.stream); err != nil {
-		_, _ = fmt.Fprintf(s.stream.stderr, "read history from file error: %v\n", err)
+		_, err = fmt.Fprintf(s.stream.stderr, "read history from file error: %v\n", err)
+		return nil, err
 	}
 	s.history.startLine = len(s.history.lines)
 	s.history.appendLine = len(s.history.lines)
 
-	return s
+	return s, nil
 }
 
 // Repl starts a read-eval-print loop that reads commands from in, executes them, and writes output to out.

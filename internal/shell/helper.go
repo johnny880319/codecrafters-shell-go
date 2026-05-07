@@ -160,6 +160,10 @@ func (s *Shell) readHistoryFromFile(filepath string, cmdIO shellStream) error {
 }
 
 func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int, index int) error {
+	// If HISTFILE is not set, the shell should not save the history to any file, but it should also not return an error.
+	if filepath == "" {
+		return nil
+	}
 	//nolint:gosec // A shell's intended behavior is to open files specified by the user
 	file, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|flag, 0o644)
 	if err != nil {

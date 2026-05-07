@@ -342,8 +342,11 @@ func TestRedirection(t *testing.T) {
 
 func testTemplate(t *testing.T, input string, expectedOutput string) {
 	var out bytes.Buffer
-	myShell := NewShell(strings.NewReader(input), &out)
-	err := myShell.Repl()
+	myShell, err := NewShell(strings.NewReader(input), &out)
+	if err != nil {
+		t.Fatalf("NewShell() error = %v, want nil", err)
+	}
+	err = myShell.Repl()
 	if err != nil {
 		t.Fatalf("Repl() error = %v, want nil", err)
 	}
