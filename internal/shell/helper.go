@@ -1,105 +1,14 @@
 package shell
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 )
-
-func handleQuotesAndEscapes(input string) []string {
-	fields := []string{}
-	var str string
-	escaped := false
-	inSingleQuotes := false
-	inDoubleQuotes := false
-	curField := ""
-	for _, r := range input {
-		if r == ' ' && !inSingleQuotes && !inDoubleQuotes && !escaped {
-			fields = append(fields, curField)
-			curField = ""
-			continue
-		}
-		str, escaped, inSingleQuotes, inDoubleQuotes = parseCharacter(r, escaped, inSingleQuotes, inDoubleQuotes)
-		curField += str
-	}
-
-	fields = append(fields, curField)
-
-	return fields
-}
-
-func (s *Shell) expandVariables(splitedInput []string) ([]string, error) {
-	for i, token := range splitedInput {
-		replacedArg, err := s.expandTokenVariables(token)
-		if err != nil {
-			return nil, err
-		}
-		splitedInput[i] = replacedArg
-	}
-	return splitedInput, nil
-}
-
-func (s *Shell) expandTokenVariables(token string) (string, error) {
-	replacedArg := ""
-	cursor := 0
-	for {
-		idx := strings.Index(token[cursor:], "$")
-		if idx == -1 {
-			replacedArg += token[cursor:]
-			break
-		}
-		replacedArg += token[cursor : cursor+idx]
-		cursor += idx + 1
-		if cursor >= len(token) {
-			break
-		}
-		replacedValue, nextCursor, err := s.expandVariableAt(token, cursor)
-		if err != nil {
-			return "", err
-		}
-
-		replacedArg += replacedValue
-		cursor = nextCursor
-		if cursor >= len(token) {
-			break
-		}
-	}
-	return replacedArg, nil
-}
-
-func (s *Shell) expandVariableAt(token string, cursor int) (string, int, error) {
-	var replaced string
-	var nextCursor int
-	if token[cursor] == '{' {
-		cursor++
-		end := strings.Index(token[cursor:], "}")
-		if end == -1 {
-			return "", 0, fmt.Errorf("syntax error: missing `}'")
-		}
-		replaced = token[cursor : cursor+end]
-		nextCursor = cursor + end + 1
-	} else {
-		end := cursor
-		if !isIdentifierStart(token[cursor]) {
-			return "", 0, fmt.Errorf("syntax error: invalid variable name")
-		}
-		end++
-
-		for end < len(token) && isIdentifierPart(token[end]) {
-			end++
-		}
-		replaced = token[cursor:end]
-		nextCursor = end
-	}
-
-	if value, ok := s.variables[replaced]; ok {
-		return value, nextCursor, nil
-	} else {
-		return "", nextCursor, nil
-	}
-}
 
 func isIdentifierStart(ch byte) bool {
 	return ch == '_' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
@@ -107,46 +16,6 @@ func isIdentifierStart(ch byte) bool {
 
 func isIdentifierPart(ch byte) bool {
 	return isIdentifierStart(ch) || (ch >= '0' && ch <= '9')
-}
-
-func splitPipeline(input []string) ([][]string, error) {
-	var pipeline [][]string
-	currentCommand := []string{}
-	for _, arg := range input {
-		switch arg {
-		case "":
-			continue
-		case "|":
-			pipeline = append(pipeline, currentCommand)
-			currentCommand = []string{}
-		default:
-			currentCommand = append(currentCommand, arg)
-		}
-	}
-	if len(currentCommand) == 0 {
-		return nil, fmt.Errorf("syntax error: unexpected token `|'")
-	}
-	pipeline = append(pipeline, currentCommand)
-	return pipeline, nil
-}
-
-func parseCharacter(r rune, escaped, inSingleQuotes, inDoubleQuotes bool) (string, bool, bool, bool) {
-	if escaped && (inDoubleQuotes && !strings.ContainsRune("\"\\$`\n", r)) {
-		return "\\" + string(r), false, inSingleQuotes, inDoubleQuotes
-	}
-	if escaped {
-		return string(r), false, inSingleQuotes, inDoubleQuotes
-	}
-	if r == '\\' && !inSingleQuotes {
-		return "", true, inSingleQuotes, inDoubleQuotes
-	}
-	if r == '\'' && !inDoubleQuotes {
-		return "", escaped, !inSingleQuotes, inDoubleQuotes
-	}
-	if r == '"' && !inSingleQuotes {
-		return "", escaped, inSingleQuotes, !inDoubleQuotes
-	}
-	return string(r), escaped, inSingleQuotes, inDoubleQuotes
 }
 
 func (s *Shell) findExecutable(command string) (string, bool) {
@@ -160,34 +29,158 @@ func (s *Shell) findExecutable(command string) (string, bool) {
 	return "", false
 }
 
-type redirect struct {
-	fd         int
-	appendFlag int
-	file       string // currently only supports file path.
+func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		_, printfErr := fmt.Fprintf(stderr, "cd: %s: No such file or directory\n", path)
+		return printfErr
+	}
+	if err != nil {
+		return fmt.Errorf("check directory: %w", err)
+	}
+	if !info.IsDir() {
+		_, printfErr := fmt.Fprintf(stderr, "cd: %s: Not a directory\n", path)
+		return printfErr
+	}
+	s.workingDir = path
+	return nil
 }
 
-func parseRedirect(args []string) ([]string, []redirect, error) {
-	redirectMap := map[string]struct {
-		fd         int
-		appendFlag int
-	}{
-		">":   {1, os.O_TRUNC},
-		"1>":  {1, os.O_TRUNC},
-		"2>":  {2, os.O_TRUNC},
-		">>":  {1, os.O_APPEND},
-		"1>>": {1, os.O_APPEND},
-		"2>>": {2, os.O_APPEND},
+func (s *Shell) handleStream(
+	prevReader io.Reader,
+	i int,
+	pipeline []commandSegment,
+) (shellStream, []io.Closer, io.Reader, error) {
+	var closers []io.Closer
+	cmdStream := shellStream{
+		stdin:  prevReader,
+		stdout: s.stream.stdout,
+		stderr: s.stream.stderr,
 	}
-	for i, arg := range args {
-		r, ok := redirectMap[arg]
+
+	if i > 0 {
+		closer, ok := prevReader.(io.Closer)
 		if !ok {
+			return shellStream{}, nil, nil, fmt.Errorf("previous reader is not closable")
+		}
+		closers = append(closers, closer)
+	}
+	if i < len(pipeline)-1 {
+		pr, pw := io.Pipe()
+		cmdStream.stdout = pw
+		prevReader = pr // used for the next round of loop
+		closers = append(closers, pw)
+	}
+
+	for _, redirect := range pipeline[i].redirects {
+		//nolint:gosec // Opening files based on user input is the intended behavior of a shell
+		file, err := os.OpenFile(redirect.file, os.O_CREATE|os.O_WRONLY|redirect.appendFlag, 0o644)
+		if err != nil {
+			closeAll(closers)
+			return shellStream{}, nil, nil, fmt.Errorf("%s: %s", redirect.file, err.Error())
+		}
+		closers = append(closers, file)
+		switch redirect.fd {
+		case 1:
+			cmdStream.stdout = file
+		case 2:
+			cmdStream.stderr = file
+		default:
+			closeAll(closers)
+			return shellStream{}, nil, nil, fmt.Errorf("unsupported redirect fd: %d", redirect.fd)
+		}
+	}
+	return cmdStream, closers, prevReader, nil
+}
+
+func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
+	s.jobs.mutex.Lock()
+	defer s.jobs.mutex.Unlock()
+	for i, job := range s.jobs.jobs {
+		if onlyDone && job.status != "Done" {
 			continue
 		}
-		if i+1 >= len(args) {
-			return nil, nil, fmt.Errorf("syntax error near unexpected token `%s'", arg)
+		if job.status == "Done" {
+			job.hasShowed = true
 		}
-
-		return append(args[:i], args[i+2:]...), []redirect{{fd: r.fd, appendFlag: r.appendFlag, file: args[i+1]}}, nil
+		indicator := " "
+		if i == len(s.jobs.jobs)-1 {
+			indicator = "+"
+		}
+		if i == len(s.jobs.jobs)-2 {
+			indicator = "-"
+		}
+		_, _ = fmt.Fprintf(
+			cmdIO.stdout,
+			"[%d]%s  %-24s %s\n",
+			job.id,
+			indicator,
+			job.status,
+			job.command,
+		)
 	}
-	return args, nil, nil
+	newJobs := make([]*shellJob, 0)
+	for _, job := range s.jobs.jobs {
+		if !job.hasShowed {
+			newJobs = append(newJobs, job)
+		}
+	}
+	s.jobs.jobs = newJobs
+}
+
+func (s *Shell) readHistoryFromFile(filepath string, cmdIO shellStream) error {
+	//nolint:gosec // A shell's intended behavior is to open files specified by the user
+	file, err := os.Open(filepath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("open history file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			if _, err := fmt.Fprintf(cmdIO.stderr, "close history file error: %v\n", err); err != nil {
+				return
+			}
+		}
+	}()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		s.history.lines = append(s.history.lines, line)
+	}
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			_, printfErr := fmt.Fprintf(cmdIO.stderr, "history: %s: No such file or directory\n", filepath)
+			return printfErr
+		}
+	}
+	return nil
+}
+
+func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int, index int) error {
+	//nolint:gosec // A shell's intended behavior is to open files specified by the user
+	file, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|flag, 0o644)
+	if err != nil {
+		return fmt.Errorf("open history file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			if _, err := fmt.Fprintf(cmdIO.stderr, "close history file error: %v\n", err); err != nil {
+				return
+			}
+		}
+	}()
+
+	writer := bufio.NewWriter(file)
+	for _, cmd := range s.history.lines[index:] {
+		if _, err := writer.WriteString(cmd + "\n"); err != nil {
+			return fmt.Errorf("write history to file: %w", err)
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return fmt.Errorf("flush history to file: %w", err)
+	}
+	return nil
 }

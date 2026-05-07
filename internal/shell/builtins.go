@@ -1,8 +1,6 @@
 package shell
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -87,23 +85,6 @@ func (s *Shell) cmdCd(args []string, cmdIO shellStream) error {
 	return s.checkDirectory(absPath, cmdIO.stderr)
 }
 
-func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		_, printfErr := fmt.Fprintf(stderr, "cd: %s: No such file or directory\n", path)
-		return printfErr
-	}
-	if err != nil {
-		return fmt.Errorf("check directory: %w", err)
-	}
-	if !info.IsDir() {
-		_, printfErr := fmt.Fprintf(stderr, "cd: %s: Not a directory\n", path)
-		return printfErr
-	}
-	s.workingDir = path
-	return nil
-}
-
 func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 	if len(args) > 1 && args[0] == "-r" {
 		return s.readHistoryFromFile(args[1], cmdIO)
@@ -142,101 +123,9 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 	return nil
 }
 
-func (s *Shell) readHistoryFromFile(filepath string, cmdIO shellStream) error {
-	//nolint:gosec // A shell's intended behavior is to open files specified by the user
-	file, err := os.Open(filepath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("open history file: %w", err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			if _, err := fmt.Fprintf(cmdIO.stderr, "close history file error: %v\n", err); err != nil {
-				return
-			}
-		}
-	}()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		s.history.lines = append(s.history.lines, line)
-	}
-	if err := scanner.Err(); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			_, printfErr := fmt.Fprintf(cmdIO.stderr, "history: %s: No such file or directory\n", filepath)
-			return printfErr
-		}
-	}
-	return nil
-}
-
-func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int, index int) error {
-	//nolint:gosec // A shell's intended behavior is to open files specified by the user
-	file, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|flag, 0o644)
-	if err != nil {
-		return fmt.Errorf("open history file: %w", err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			if _, err := fmt.Fprintf(cmdIO.stderr, "close history file error: %v\n", err); err != nil {
-				return
-			}
-		}
-	}()
-
-	writer := bufio.NewWriter(file)
-	for _, cmd := range s.history.lines[index:] {
-		if _, err := writer.WriteString(cmd + "\n"); err != nil {
-			return fmt.Errorf("write history to file: %w", err)
-		}
-	}
-	if err := writer.Flush(); err != nil {
-		return fmt.Errorf("flush history to file: %w", err)
-	}
-	return nil
-}
-
 func (s *Shell) cmdJobs(_ []string, cmdIO shellStream) error {
 	s.showJobs(cmdIO, false)
 	return nil
-}
-
-func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
-	s.jobs.mutex.Lock()
-	defer s.jobs.mutex.Unlock()
-	for i, job := range s.jobs.jobs {
-		if onlyDone && job.status != "Done" {
-			continue
-		}
-		if job.status == "Done" {
-			job.hasShowed = true
-		}
-		indicator := " "
-		if i == len(s.jobs.jobs)-1 {
-			indicator = "+"
-		}
-		if i == len(s.jobs.jobs)-2 {
-			indicator = "-"
-		}
-		_, _ = fmt.Fprintf(
-			cmdIO.stdout,
-			"[%d]%s  %-24s %s\n",
-			job.id,
-			indicator,
-			job.status,
-			job.command,
-		)
-	}
-	newJobs := make([]*job, 0)
-	for _, job := range s.jobs.jobs {
-		if !job.hasShowed {
-			newJobs = append(newJobs, job)
-		}
-	}
-	s.jobs.jobs = newJobs
 }
 
 func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {

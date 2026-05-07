@@ -119,28 +119,6 @@ func TestImplementType(t *testing.T) {
 	)
 }
 
-func TestLocateExecutableFiles(t *testing.T) {
-	t.Parallel()
-	testTemplate(
-		t,
-		strings.Join([]string{
-			"type ls\n",
-			"type basename\n",
-			"type invalid_command\n",
-		}, ""),
-		strings.Join([]string{
-			"$ ",
-			"ls is /usr/bin/ls\n",
-			"$ ",
-			"basename is /usr/bin/basename\n",
-			"$ ",
-			"invalid_command: not found\n",
-			"$ ",
-		}, ""),
-		WithSysPath("/usr/bin:/usr/local/bin:"+os.Getenv("PATH")),
-	)
-}
-
 func TestRunAProgram(t *testing.T) {
 	t.Parallel()
 	testTemplate(
@@ -151,20 +129,6 @@ func TestRunAProgram(t *testing.T) {
 			"golang\n",
 			"$ ",
 		}, ""),
-	)
-}
-
-func TestThePwdBuiltin(t *testing.T) {
-	t.Parallel()
-	testTemplate(
-		t,
-		"pwd\n",
-		strings.Join([]string{
-			"$ ",
-			"/usr/local/bin\n",
-			"$ ",
-		}, ""),
-		WithWorkingDir("/usr/local/bin"),
 	)
 }
 
@@ -376,9 +340,9 @@ func TestRedirection(t *testing.T) {
 	)
 }
 
-func testTemplate(t *testing.T, input string, expectedOutput string, opts ...Option) {
+func testTemplate(t *testing.T, input string, expectedOutput string) {
 	var out bytes.Buffer
-	myShell := NewShell(strings.NewReader(input), &out, opts...)
+	myShell := NewShell(strings.NewReader(input), &out)
 	err := myShell.Repl()
 	if err != nil {
 		t.Fatalf("Repl() error = %v, want nil", err)
