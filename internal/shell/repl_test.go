@@ -333,6 +333,23 @@ func TestBackslashWithinDoubleQuotes(t *testing.T) {
 	)
 }
 
+func TestVariableReplacement(t *testing.T) {
+	t.Parallel()
+	testTemplate(
+		t,
+		strings.Join([]string{
+			"declare pineapple=raspberry\n",
+			"echo ${missing_var_6}_suffix ${pineapple} ${missing_var_4} $missing_var_8\n",
+		}, ""),
+		strings.Join([]string{
+			"$ ",
+			"$ ",
+			"_suffix raspberry\n",
+			"$ ",
+		}, ""),
+	)
+}
+
 func TestRedirection(t *testing.T) {
 	t.Parallel()
 

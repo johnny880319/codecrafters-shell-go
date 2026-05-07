@@ -30,54 +30,69 @@ func handleQuotesAndEscapes(input string) []string {
 	return fields
 }
 
-//nolint:gocognit // Will refactor this function later.
-func (s *Shell) replaceVariables(splitedInput []string) []string {
-	for i, arg := range splitedInput {
-		replacedArg := ""
-		cursor := 0
-		for {
-			idx := strings.Index(arg[cursor:], "$")
-			if idx == -1 {
-				replacedArg += arg[cursor:]
-				break
-			}
-			replacedArg += arg[cursor : cursor+idx]
-			cursor += idx + 1
-			if cursor >= len(arg) {
-				break
-			}
-			var end int
-			if arg[cursor] != '{' {
-				idx := strings.Index(arg[cursor:], ".")
-				if idx == -1 {
-					end = len(arg)
-				} else {
-					end = cursor + idx
-				}
-			} else {
-				cursor++
-				end = strings.Index(arg[cursor:], "}")
-				if end == -1 {
-					end = len(arg)
-				}
-				end += cursor
-			}
-			varName := arg[cursor:end]
-			var varvalue string
-			if value, ok := s.declares[varName]; ok {
-				varvalue = value
-			} else {
-				varvalue = ""
-			}
-			replacedArg += varvalue
-			cursor = end + 1
-			if cursor >= len(arg) {
-				break
-			}
+func (s *Shell) replaceVariables(splitedInput []string) ([]string, error) {
+	for i, token := range splitedInput {
+		replacedArg, err := s.replaceToken(token)
+		if err != nil {
+			return nil, err
 		}
 		splitedInput[i] = replacedArg
 	}
-	return splitedInput
+	return splitedInput, nil
+}
+
+func (s *Shell) replaceToken(token string) (string, error) {
+	replacedArg := ""
+	cursor := 0
+	for {
+		idx := strings.Index(token[cursor:], "$")
+		if idx == -1 {
+			replacedArg += token[cursor:]
+			break
+		}
+		replacedArg += token[cursor : cursor+idx]
+		cursor += idx + 1
+		if cursor >= len(token) {
+			break
+		}
+		newCursor, end, err := computeReplaceRange(token, cursor)
+		if err != nil {
+			return "", err
+		}
+		cursor = newCursor
+
+		varName := token[cursor:end]
+		var varvalue string
+		if value, ok := s.declares[varName]; ok {
+			varvalue = value
+		} else {
+			varvalue = ""
+		}
+		replacedArg += varvalue
+		cursor = end + 1
+		if cursor >= len(token) {
+			break
+		}
+	}
+	return replacedArg, nil
+}
+
+func computeReplaceRange(token string, cursor int) (int, int, error) {
+	if token[cursor] == '{' {
+		cursor++
+		end := strings.Index(token[cursor:], "}")
+		if end == -1 {
+			return 0, 0, fmt.Errorf("syntax error: missing `}'")
+		}
+		return cursor, cursor + end, nil
+	}
+
+	idx := strings.Index(token[cursor:], ".")
+	if idx == -1 {
+		return cursor, len(token), nil
+	} else {
+		return cursor, cursor + idx, nil
+	}
 }
 
 func splitPipeline(input []string) ([][]string, error) {

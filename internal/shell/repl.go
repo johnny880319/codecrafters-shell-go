@@ -357,7 +357,10 @@ func (s *Shell) parseInput(input string) (commandLine, error) {
 		input = strings.TrimSpace(input[:len(input)-1])
 	}
 	splitedInput := handleQuotesAndEscapes(input)
-	splitedInput = s.replaceVariables(splitedInput)
+	splitedInput, err := s.replaceVariables(splitedInput)
+	if err != nil {
+		return commandLine{}, err
+	}
 	pipelineStr, err := splitPipeline(splitedInput)
 	if err != nil {
 		return cl, err
