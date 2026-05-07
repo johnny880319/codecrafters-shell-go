@@ -247,20 +247,23 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 	switch args[0] {
 	case "-C":
 		if len(args) != 3 {
-			return fmt.Errorf("complete: -C option requires exactly 2 arguments")
+			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -C option requires exactly 2 arguments")
+			return nil
 		}
 		path := args[1]
 		command := args[2]
 		s.completers[command] = path
 	case "-r":
 		if len(args) != 2 {
-			return fmt.Errorf("complete: -r option requires exactly 1 argument")
+			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -r option requires exactly 1 argument")
+			return nil
 		}
 		command := args[1]
 		delete(s.completers, command)
 	case "-p":
 		if len(args) != 2 {
-			return fmt.Errorf("complete: -p option requires exactly 1 argument")
+			_, _ = fmt.Fprintln(cmdIO.stderr, "complete: -p option requires exactly 1 argument")
+			return nil
 		}
 		command := args[1]
 		path, found := s.completers[command]
@@ -275,12 +278,14 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 
 func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 	if len(args) < 1 {
-		return fmt.Errorf("declare: missing argument")
+		_, _ = fmt.Fprintln(cmdIO.stderr, "declare: missing argument")
+		return nil
 	}
 	switch args[0] {
 	case "-p":
 		if len(args) != 2 {
-			return fmt.Errorf("declare: -p option requires exactly 1 argument")
+			_, _ = fmt.Fprintln(cmdIO.stderr, "declare: -p option requires exactly 1 argument")
+			return nil
 		}
 		name := args[1]
 		value, found := s.declares[name]
@@ -292,7 +297,8 @@ func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 	default:
 		parts := strings.SplitN(args[0], "=", 2)
 		if len(parts) != 2 {
-			return fmt.Errorf("declare: invalid argument: %s", args[0])
+			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: invalid argument: %s\n", args[0])
+			return nil
 		}
 		name, value := parts[0], parts[1]
 		if !isValidIdentifier(name) {
