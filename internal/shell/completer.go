@@ -18,10 +18,8 @@ type customCompleter struct {
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
-	_ = os.Setenv("COMP_LINE", string(line))
-	_ = os.Setenv("COMP_POINT", fmt.Sprintf("%d", pos))
 	lineStr := string(line[:pos])
-	matches := c.getMatchStrings(lineStr)
+	matches := c.getMatchStrings(lineStr, string(line), fmt.Sprintf("%d", pos))
 
 	if len(matches) == 0 {
 		c.tabCount = 0
@@ -98,13 +96,13 @@ func longestCommonPrefix(strs []string) string {
 	return prefix
 }
 
-func (c *customCompleter) getMatchStrings(lineStr string) []string {
+func (c *customCompleter) getMatchStrings(lineStr string, compLine string, compPoint string) []string {
 	inputTokens := handleQuotesAndEscapes(lineStr)
 	splitedStr := make([]string, len(inputTokens))
 	for i, token := range inputTokens {
 		splitedStr[i] = token.value
 	}
-	matches := c.findProgrammableCompletions(splitedStr)
+	matches := c.findProgrammableCompletions(splitedStr, compLine, compPoint)
 	if len(matches) > 0 {
 		slices.Sort(matches)
 		return slices.Compact(matches)
@@ -133,7 +131,7 @@ func (c *customCompleter) getMatchStrings(lineStr string) []string {
 	return slices.Compact(matches)
 }
 
-func (c *customCompleter) findProgrammableCompletions(splitedStr []string) []string {
+func (c *customCompleter) findProgrammableCompletions(splitedStr []string, compLine string, compPoint string) []string {
 	if len(splitedStr) < 2 {
 		return nil
 	}
@@ -147,6 +145,7 @@ func (c *customCompleter) findProgrammableCompletions(splitedStr []string) []str
 		defer cancel()
 		//nolint:gosec // This command is not constructed from user input, so it is not vulnerable to command injection.
 		cmd := exec.CommandContext(ctx, completer, commandName, currentWord, previousWord)
+		cmd.Env = append(os.Environ(), "COMP_LINE="+compLine, "COMP_POINT="+compPoint)
 		output, err := cmd.Output()
 		if err != nil {
 			return nil
