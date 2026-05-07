@@ -99,7 +99,11 @@ func longestCommonPrefix(strs []string) string {
 }
 
 func (c *customCompleter) getMatchStrings(lineStr string) []string {
-	splitedStr := handleQuotesAndEscapes(lineStr)
+	inputTokens := handleQuotesAndEscapes(lineStr)
+	splitedStr := make([]string, len(inputTokens))
+	for i, token := range inputTokens {
+		splitedStr[i] = token.value
+	}
 	matches := c.findProgrammableCompletions(splitedStr)
 	if len(matches) > 0 {
 		slices.Sort(matches)

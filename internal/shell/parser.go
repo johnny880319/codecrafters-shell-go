@@ -30,8 +30,8 @@ func (s *Shell) parseInput(input string) (commandLine, error) {
 		cl.isBackground = true
 		input = strings.TrimSpace(input[:len(input)-1])
 	}
-	splitedInput := handleQuotesAndEscapes(input)
-	splitedInput, err := s.expandVariables(splitedInput)
+	inputTokens := handleQuotesAndEscapes(input)
+	splitedInput, err := s.expandVariables(inputTokens)
 	if err != nil {
 		return commandLine{}, err
 	}
@@ -59,24 +59,32 @@ func (s *Shell) parseInput(input string) (commandLine, error) {
 	return cl, nil
 }
 
-func handleQuotesAndEscapes(input string) []string {
-	fields := []string{}
+type inputToken struct {
+	value          string
+	quotedBySingle bool
+}
+
+func handleQuotesAndEscapes(input string) []inputToken {
+	fields := []inputToken{}
 	var str string
 	escaped := false
 	inSingleQuotes := false
 	inDoubleQuotes := false
+	quotedBySingle := false
 	curField := ""
 	for _, r := range input {
 		if r == ' ' && !inSingleQuotes && !inDoubleQuotes && !escaped {
-			fields = append(fields, curField)
+			fields = append(fields, inputToken{value: curField, quotedBySingle: quotedBySingle})
 			curField = ""
+			quotedBySingle = false
 			continue
 		}
 		str, escaped, inSingleQuotes, inDoubleQuotes = parseCharacter(r, escaped, inSingleQuotes, inDoubleQuotes)
+		quotedBySingle = quotedBySingle || inSingleQuotes
 		curField += str
 	}
 
-	fields = append(fields, curField)
+	fields = append(fields, inputToken{value: curField, quotedBySingle: quotedBySingle})
 
 	return fields
 }
@@ -100,15 +108,20 @@ func parseCharacter(r rune, escaped, inSingleQuotes, inDoubleQuotes bool) (strin
 	return string(r), escaped, inSingleQuotes, inDoubleQuotes
 }
 
-func (s *Shell) expandVariables(splitedInput []string) ([]string, error) {
+func (s *Shell) expandVariables(splitedInput []inputToken) ([]string, error) {
+	expanded := make([]string, len(splitedInput))
 	for i, token := range splitedInput {
-		replacedArg, err := s.expandTokenVariables(token)
+		if token.quotedBySingle {
+			expanded[i] = token.value
+			continue
+		}
+		replacedArg, err := s.expandTokenVariables(token.value)
 		if err != nil {
 			return nil, err
 		}
-		splitedInput[i] = replacedArg
+		expanded[i] = replacedArg
 	}
-	return splitedInput, nil
+	return expanded, nil
 }
 
 func (s *Shell) expandTokenVariables(token string) (string, error) {
