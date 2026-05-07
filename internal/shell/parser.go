@@ -108,9 +108,9 @@ func parseCharacter(r rune, escaped, inSingleQuotes, inDoubleQuotes bool) (strin
 	return string(r), escaped, inSingleQuotes, inDoubleQuotes
 }
 
-func (s *Shell) expandVariables(splitedInput []inputToken) ([]string, error) {
-	expanded := make([]string, len(splitedInput))
-	for i, token := range splitedInput {
+func (s *Shell) expandVariables(tokens []inputToken) ([]string, error) {
+	expanded := make([]string, len(tokens))
+	for i, token := range tokens {
 		if token.quotedBySingle {
 			expanded[i] = token.value
 			continue
