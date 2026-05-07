@@ -301,25 +301,17 @@ func (s *Shell) cmdDeclare(args []string, cmdIO shellStream) error {
 			return nil
 		}
 		name, value := parts[0], parts[1]
-		if !isValidIdentifier(name) {
+		if !isIdentifierStart(name[0]) {
 			_, _ = fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
 			return nil
+		}
+		for i := 1; i < len(name); i++ {
+			if !isIdentifierPart(name[i]) {
+				_, _ = fmt.Fprintf(cmdIO.stderr, "declare: `%s=%s': not a valid identifier\n", name, value)
+				return nil
+			}
 		}
 		s.declares[name] = value
 	}
 	return nil
-}
-
-func isValidIdentifier(name string) bool {
-	if name == "" {
-		return false
-	}
-	for i, ch := range name {
-		if i == 0 && ch != '_' && (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') {
-			return false
-		} else if ch != '_' && (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && (ch < '0' || ch > '9') {
-			return false
-		}
-	}
-	return true
 }
