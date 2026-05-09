@@ -112,7 +112,10 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 	if len(args) > 0 && args[0] == "-a" {
 		err := s.writeHistoryToFile(args[1], cmdIO, os.O_APPEND, s.history.appendLine)
 		if err != nil {
-			return fmt.Errorf("history: %w", err)
+			_, err := fmt.Fprintf(cmdIO.stderr, "failed to append history: %v\n", err)
+			if err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
 		}
 		s.history.appendLine = len(s.history.lines)
 		return nil
