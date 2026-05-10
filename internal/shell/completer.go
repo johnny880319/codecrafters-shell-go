@@ -23,9 +23,7 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	if len(matches) == 0 {
 		c.tabCount = 0
-		if _, err := fmt.Fprint(c.shell.stream.stdout, "\x07"); err != nil {
-			return nil, len(lineStr)
-		}
+		_, _ = fmt.Fprint(c.shell.stream.stdout, "\x07")
 		return nil, len(lineStr)
 	}
 
@@ -44,40 +42,38 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	if c.tabCount == 0 {
-		if _, err := fmt.Fprint(c.shell.stream.stdout, "\x07"); err != nil {
-			return nil, len(lineStr)
-		}
+		_, _ = fmt.Fprint(c.shell.stream.stdout, "\x07")
 		c.tabCount = 1
 		return nil, len(lineStr)
 	}
 	c.tabCount = 0
 
-	return c.handleMultipleMatches(matches, lineStr)
+	return nil, c.handleMultipleMatches(matches, lineStr)
 }
 
-func (c *customCompleter) handleMultipleMatches(matches []string, lineStr string) (newLine [][]rune, length int) {
+func (c *customCompleter) handleMultipleMatches(matches []string, lineStr string) (length int) {
 	if _, err := fmt.Fprintln(c.shell.stream.stdout); err != nil {
-		return nil, len(lineStr)
+		return len(lineStr)
 	}
 	for i, match := range matches {
 		toPrint := lineStr + match
 		toPrintSlice := strings.Split(toPrint, " ")
 		toPrint = toPrintSlice[len(toPrintSlice)-1]
 		if _, err := fmt.Fprint(c.shell.stream.stdout, toPrint); err != nil {
-			return nil, len(lineStr)
+			return len(lineStr)
 		}
 		if i < len(matches)-1 {
 			if _, err := fmt.Fprint(c.shell.stream.stdout, "  "); err != nil {
-				return nil, len(lineStr)
+				return len(lineStr)
 			}
 		}
 	}
 
 	if _, err := fmt.Fprint(c.shell.stream.stdout, "\n"+prompt+lineStr); err != nil {
-		return nil, len(lineStr)
+		return len(lineStr)
 	}
 
-	return nil, len(lineStr)
+	return len(lineStr)
 }
 
 func longestCommonPrefix(strs []string) string {
