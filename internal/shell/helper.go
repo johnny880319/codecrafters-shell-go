@@ -108,16 +108,14 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) error {
 		if i == len(s.jobs.jobs)-2 {
 			indicator = "-"
 		}
-		if _, err := fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			cmdIO.stdout,
 			"[%d]%s  %-24s %s\n",
 			job.id,
 			indicator,
 			job.status,
 			job.command,
-		); err != nil {
-			return fmt.Errorf("fail to write to stdout: %w", err)
-		}
+		)
 	}
 	newJobs := make([]*shellJob, 0)
 	for _, job := range s.jobs.jobs {

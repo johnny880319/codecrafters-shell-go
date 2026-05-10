@@ -78,8 +78,7 @@ func NewShell(in io.Reader, out io.Writer) (*Shell, error) {
 
 	s.builtinCommandMap = s.getCommandFuncMap()
 	if err := s.readHistoryFromFile(s.env.histfile); err != nil {
-		_, err = fmt.Fprintln(s.stream.stderr, err)
-		return nil, err
+		return nil, fmt.Errorf("read history from file: %w", err)
 	}
 	s.history.startLine = len(s.history.lines)
 	s.history.appendLine = len(s.history.lines)
@@ -172,7 +171,7 @@ func (s *Shell) execute(input string) error {
 		}
 	}
 
-	if cmdline.isBackground {
+	if cmdline.isBackground && currentJob != nil {
 		_, _ = fmt.Fprintf(s.stream.stdout, "[%d] %d\n", currentJob.id, currentJob.pid)
 	} else {
 		wg.Wait()

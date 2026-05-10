@@ -95,14 +95,14 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 		return nil
 	}
 
-	if len(args) > 0 && args[0] == "-w" {
+	if len(args) > 1 && args[0] == "-w" {
 		if err := s.writeHistoryToFile(args[1], os.O_TRUNC, 0); err != nil {
 			_, _ = fmt.Fprintln(cmdIO.stderr, err)
 		}
 		return nil
 	}
 
-	if len(args) > 0 && args[0] == "-a" {
+	if len(args) > 1 && args[0] == "-a" {
 		if err := s.writeHistoryToFile(args[1], os.O_APPEND, s.history.appendLine); err != nil {
 			_, _ = fmt.Fprintln(cmdIO.stderr, err)
 		}
@@ -164,10 +164,7 @@ func (s *Shell) cmdComplete(args []string, cmdIO shellStream) error {
 		if found {
 			_, _ = fmt.Fprintf(cmdIO.stdout, "complete -C '%s' %s\n", path, command)
 		} else {
-			_, err := fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
-			if err != nil {
-				return fmt.Errorf("fail to write to stderr: %w", err)
-			}
+			_, _ = fmt.Fprintf(cmdIO.stderr, "complete: %s: no completion specification\n", command)
 		}
 	}
 	return nil
