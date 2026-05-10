@@ -77,8 +77,8 @@ func NewShell(in io.Reader, out io.Writer) (*Shell, error) {
 	}
 
 	s.builtinCommandMap = s.getCommandFuncMap()
-	if err := s.readHistoryFromFile(s.env.histfile, s.stream); err != nil {
-		_, err = fmt.Fprintf(s.stream.stderr, "read history from file error: %v\n", err)
+	if err := s.readHistoryFromFile(s.env.histfile); err != nil {
+		_, err = fmt.Fprintln(s.stream.stderr, err)
 		return nil, err
 	}
 	s.history.startLine = len(s.history.lines)
@@ -177,8 +177,7 @@ func (s *Shell) execute(input string) error {
 	} else {
 		wg.Wait()
 	}
-	s.showJobs(s.stream, true)
-	return nil
+	return s.showJobs(s.stream, true)
 }
 
 func startBuiltinCommand(

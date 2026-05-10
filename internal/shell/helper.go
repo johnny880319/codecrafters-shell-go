@@ -29,18 +29,16 @@ func (s *Shell) findExecutable(command string) (string, bool) {
 	return "", false
 }
 
-func (s *Shell) checkDirectory(path string, stderr io.Writer) error {
+func (s *Shell) checkDirectory(path string) error {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		_, printfErr := fmt.Fprintf(stderr, "cd: %s: No such file or directory\n", path)
-		return printfErr
+		return fmt.Errorf("cd: %s: No such file or directory", path)
 	}
 	if err != nil {
 		return fmt.Errorf("check directory: %w", err)
 	}
 	if !info.IsDir() {
-		_, printfErr := fmt.Fprintf(stderr, "cd: %s: Not a directory\n", path)
-		return printfErr
+		return fmt.Errorf("cd: %s: Not a directory", path)
 	}
 	s.workingDir = path
 	return nil
@@ -93,7 +91,7 @@ func (s *Shell) handleStream(
 	return cmdStream, closers, prevReader, nil
 }
 
-func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
+func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) error {
 	s.jobs.mutex.Lock()
 	defer s.jobs.mutex.Unlock()
 	for i, job := range s.jobs.jobs {
@@ -110,14 +108,16 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 		if i == len(s.jobs.jobs)-2 {
 			indicator = "-"
 		}
-		_, _ = fmt.Fprintf(
+		if _, err := fmt.Fprintf(
 			cmdIO.stdout,
 			"[%d]%s  %-24s %s\n",
 			job.id,
 			indicator,
 			job.status,
 			job.command,
-		)
+		); err != nil {
+			return fmt.Errorf("fail to write to stdout: %w", err)
+		}
 	}
 	newJobs := make([]*shellJob, 0)
 	for _, job := range s.jobs.jobs {
@@ -126,9 +126,10 @@ func (s *Shell) showJobs(cmdIO shellStream, onlyDone bool) {
 		}
 	}
 	s.jobs.jobs = newJobs
+	return nil
 }
 
-func (s *Shell) readHistoryFromFile(filepath string, cmdIO shellStream) error {
+func (s *Shell) readHistoryFromFile(filepath string) (err error) {
 	//nolint:gosec // A shell's intended behavior is to open files specified by the user
 	file, err := os.Open(filepath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -138,10 +139,8 @@ func (s *Shell) readHistoryFromFile(filepath string, cmdIO shellStream) error {
 		return fmt.Errorf("open history file: %w", err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			if _, err := fmt.Fprintf(cmdIO.stderr, "close history file error: %v\n", err); err != nil {
-				return
-			}
+		if closeErr := file.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close history file: %w", closeErr))
 		}
 	}()
 
@@ -152,14 +151,13 @@ func (s *Shell) readHistoryFromFile(filepath string, cmdIO shellStream) error {
 	}
 	if err := scanner.Err(); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			_, printfErr := fmt.Fprintf(cmdIO.stderr, "history: %s: No such file or directory\n", filepath)
-			return printfErr
+			return fmt.Errorf("history: %s: No such file or directory", filepath)
 		}
 	}
 	return nil
 }
 
-func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int, index int) error {
+func (s *Shell) writeHistoryToFile(filepath string, flag int, index int) (err error) {
 	// If HISTFILE is not set, the shell should not save the history to any file, but it should also not return an error.
 	if filepath == "" {
 		return nil
@@ -170,10 +168,8 @@ func (s *Shell) writeHistoryToFile(filepath string, cmdIO shellStream, flag int,
 		return fmt.Errorf("open history file: %w", err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			if _, err := fmt.Fprintf(cmdIO.stderr, "close history file error: %v\n", err); err != nil {
-				return
-			}
+		if closeErr := file.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close history file: %w", closeErr))
 		}
 	}()
 

@@ -29,10 +29,8 @@ func (s *Shell) getCommandFuncMap() map[string]builtinCommand {
 }
 
 func (s *Shell) cmdExit(_ []string, _ shellStream) error {
-	err := s.writeHistoryToFile(s.env.histfile, s.stream, os.O_APPEND, s.history.startLine)
-	if err != nil {
-		_, err := fmt.Fprintf(s.stream.stderr, "failed to save history: %v\n", err)
-		if err != nil {
+	if err := s.writeHistoryToFile(s.env.histfile, os.O_APPEND, s.history.startLine); err != nil {
+		if _, err := fmt.Fprintf(s.stream.stderr, "failed to save history: %v\n", err); err != nil {
 			return fmt.Errorf("fail to write to stderr: %w", err)
 		}
 	}
@@ -40,8 +38,7 @@ func (s *Shell) cmdExit(_ []string, _ shellStream) error {
 }
 
 func (s *Shell) cmdEcho(args []string, cmdIO shellStream) error {
-	_, err := fmt.Fprintln(cmdIO.stdout, strings.Join(args, " "))
-	if err != nil {
+	if _, err := fmt.Fprintln(cmdIO.stdout, strings.Join(args, " ")); err != nil {
 		return fmt.Errorf("fail to write to stdout: %w", err)
 	}
 	return nil
@@ -89,7 +86,12 @@ func (s *Shell) cmdCd(args []string, cmdIO shellStream) error {
 
 	newPath := args[0]
 	if filepath.IsAbs(newPath) {
-		return s.checkDirectory(newPath, cmdIO.stderr)
+		if err := s.checkDirectory(newPath); err != nil {
+			if _, err := fmt.Fprintln(cmdIO.stderr, err); err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
+		}
+		return nil
 	}
 
 	if strings.HasPrefix(newPath, "~") {
@@ -97,23 +99,37 @@ func (s *Shell) cmdCd(args []string, cmdIO shellStream) error {
 		newPath = newPath[1:]
 	}
 	absPath := filepath.Join(s.workingDir, newPath)
-	return s.checkDirectory(absPath, cmdIO.stderr)
+	if err := s.checkDirectory(absPath); err != nil {
+		if _, err := fmt.Fprintln(cmdIO.stderr, err); err != nil {
+			return fmt.Errorf("fail to write to stderr: %w", err)
+		}
+	}
+	return nil
 }
 
+//nolint:gocognit // Will refactor this function in the future.
 func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 	if len(args) > 1 && args[0] == "-r" {
-		return s.readHistoryFromFile(args[1], cmdIO)
+		if err := s.readHistoryFromFile(args[1]); err != nil {
+			if _, err := fmt.Fprintln(cmdIO.stderr, err); err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
+		}
+		return nil
 	}
 
 	if len(args) > 0 && args[0] == "-w" {
-		return s.writeHistoryToFile(args[1], cmdIO, os.O_TRUNC, 0)
+		if err := s.writeHistoryToFile(args[1], os.O_TRUNC, 0); err != nil {
+			if _, err := fmt.Fprintln(cmdIO.stderr, err); err != nil {
+				return fmt.Errorf("fail to write to stderr: %w", err)
+			}
+		}
+		return nil
 	}
 
 	if len(args) > 0 && args[0] == "-a" {
-		err := s.writeHistoryToFile(args[1], cmdIO, os.O_APPEND, s.history.appendLine)
-		if err != nil {
-			_, err := fmt.Fprintf(cmdIO.stderr, "failed to append history: %v\n", err)
-			if err != nil {
+		if err := s.writeHistoryToFile(args[1], os.O_APPEND, s.history.appendLine); err != nil {
+			if _, err := fmt.Fprintln(cmdIO.stderr, err); err != nil {
 				return fmt.Errorf("fail to write to stderr: %w", err)
 			}
 		}
@@ -145,8 +161,7 @@ func (s *Shell) cmdHistory(args []string, cmdIO shellStream) error {
 }
 
 func (s *Shell) cmdJobs(_ []string, cmdIO shellStream) error {
-	s.showJobs(cmdIO, false)
-	return nil
+	return s.showJobs(cmdIO, false)
 }
 
 //nolint:gocognit // Will refactor this function in the future.
