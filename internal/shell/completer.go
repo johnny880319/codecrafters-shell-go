@@ -18,16 +18,12 @@ type customCompleter struct {
 
 // Do implements readline.AutoCompleter to provide tab completion for built-in commands.
 func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
-	_ = os.Setenv("COMP_LINE", string(line))
-	_ = os.Setenv("COMP_POINT", fmt.Sprintf("%d", pos))
 	lineStr := string(line[:pos])
-	matches := c.getMatchStrings(lineStr)
+	matches := c.getMatchStrings(lineStr, string(line), fmt.Sprintf("%d", pos))
 
 	if len(matches) == 0 {
 		c.tabCount = 0
-		if _, err := fmt.Fprint(c.shell.stream.stdout, "\x07"); err != nil {
-			return nil, len(lineStr)
-		}
+		_, _ = fmt.Fprint(c.shell.stream.stdout, "\x07")
 		return nil, len(lineStr)
 	}
 
@@ -46,40 +42,38 @@ func (c *customCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	if c.tabCount == 0 {
-		if _, err := fmt.Fprint(c.shell.stream.stdout, "\x07"); err != nil {
-			return nil, len(lineStr)
-		}
+		_, _ = fmt.Fprint(c.shell.stream.stdout, "\x07")
 		c.tabCount = 1
 		return nil, len(lineStr)
 	}
 	c.tabCount = 0
 
-	return c.handleMultipleMatches(matches, lineStr)
+	return nil, c.handleMultipleMatches(matches, lineStr)
 }
 
-func (c *customCompleter) handleMultipleMatches(matches []string, lineStr string) (newLine [][]rune, length int) {
+func (c *customCompleter) handleMultipleMatches(matches []string, lineStr string) (length int) {
 	if _, err := fmt.Fprintln(c.shell.stream.stdout); err != nil {
-		return nil, len(lineStr)
+		return len(lineStr)
 	}
 	for i, match := range matches {
 		toPrint := lineStr + match
 		toPrintSlice := strings.Split(toPrint, " ")
 		toPrint = toPrintSlice[len(toPrintSlice)-1]
 		if _, err := fmt.Fprint(c.shell.stream.stdout, toPrint); err != nil {
-			return nil, len(lineStr)
+			return len(lineStr)
 		}
 		if i < len(matches)-1 {
 			if _, err := fmt.Fprint(c.shell.stream.stdout, "  "); err != nil {
-				return nil, len(lineStr)
+				return len(lineStr)
 			}
 		}
 	}
 
 	if _, err := fmt.Fprint(c.shell.stream.stdout, "\n"+prompt+lineStr); err != nil {
-		return nil, len(lineStr)
+		return len(lineStr)
 	}
 
-	return nil, len(lineStr)
+	return len(lineStr)
 }
 
 func longestCommonPrefix(strs []string) string {
@@ -98,9 +92,13 @@ func longestCommonPrefix(strs []string) string {
 	return prefix
 }
 
-func (c *customCompleter) getMatchStrings(lineStr string) []string {
-	splitedStr := handleQuotesAndEscapes(lineStr)
-	matches := c.findProgrammableCompletions(splitedStr)
+func (c *customCompleter) getMatchStrings(lineStr string, compLine string, compPoint string) []string {
+	inputTokens := handleQuotesAndEscapes(lineStr)
+	splitedStr := make([]string, len(inputTokens))
+	for i, token := range inputTokens {
+		splitedStr[i] = token.value
+	}
+	matches := c.findProgrammableCompletions(splitedStr, compLine, compPoint)
 	if len(matches) > 0 {
 		slices.Sort(matches)
 		return slices.Compact(matches)
@@ -129,7 +127,7 @@ func (c *customCompleter) getMatchStrings(lineStr string) []string {
 	return slices.Compact(matches)
 }
 
-func (c *customCompleter) findProgrammableCompletions(splitedStr []string) []string {
+func (c *customCompleter) findProgrammableCompletions(splitedStr []string, compLine string, compPoint string) []string {
 	if len(splitedStr) < 2 {
 		return nil
 	}
@@ -143,6 +141,7 @@ func (c *customCompleter) findProgrammableCompletions(splitedStr []string) []str
 		defer cancel()
 		//nolint:gosec // This command is not constructed from user input, so it is not vulnerable to command injection.
 		cmd := exec.CommandContext(ctx, completer, commandName, currentWord, previousWord)
+		cmd.Env = append(os.Environ(), "COMP_LINE="+compLine, "COMP_POINT="+compPoint)
 		output, err := cmd.Output()
 		if err != nil {
 			return nil

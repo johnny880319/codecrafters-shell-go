@@ -26,7 +26,7 @@ type Shell struct {
 	stream            shellStream
 	env               shellEnv
 	history           shellHistory
-	jobs              jobs
+	jobs              shellJobs
 	completers        map[string]string
 	variables         map[string]string
 }
@@ -48,12 +48,12 @@ type shellHistory struct {
 	appendLine int
 }
 
-type jobs struct {
-	jobs  []*job
+type shellJobs struct {
+	jobs  []*shellJob
 	mutex sync.Mutex
 }
 
-type job struct {
+type shellJob struct {
 	id        int
 	pid       int
 	command   string
@@ -61,24 +61,11 @@ type job struct {
 	hasShowed bool
 }
 
-// Option defines a functional parameter for configuring a Shell instance.
-type Option func(*Shell)
-
-// WithSysPath overrides the default system PATH used by the Shell.
-func WithSysPath(p string) Option {
-	return func(s *Shell) { s.env.path = p }
-}
-
-// WithWorkingDir overrides the default initial working directory for the Shell.
-func WithWorkingDir(d string) Option {
-	return func(s *Shell) { s.workingDir = d }
-}
-
 // NewShell creates a new Shell instance with default OS environment variables.
-func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
+func NewShell(in io.Reader, out io.Writer) (*Shell, error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		wd = "/"
+		return nil, fmt.Errorf("get working directory: %w", err)
 	}
 
 	s := &Shell{
@@ -89,18 +76,14 @@ func NewShell(in io.Reader, out io.Writer, opts ...Option) *Shell {
 		variables:  make(map[string]string),
 	}
 
-	for _, opt := range opts {
-		opt(s)
-	}
-
 	s.builtinCommandMap = s.getCommandFuncMap()
-	if err := s.readHistoryFromFile(s.env.histfile, s.stream); err != nil {
-		_, _ = fmt.Fprintf(s.stream.stderr, "read history from file error: %v\n", err)
+	if err := s.readHistoryFromFile(s.env.histfile); err != nil {
+		return nil, fmt.Errorf("read history from file: %w", err)
 	}
 	s.history.startLine = len(s.history.lines)
 	s.history.appendLine = len(s.history.lines)
 
-	return s
+	return s, nil
 }
 
 // Repl starts a read-eval-print loop that reads commands from in, executes them, and writes output to out.
@@ -156,7 +139,7 @@ func (s *Shell) execute(input string) error {
 
 	var wg sync.WaitGroup
 
-	var currentJob *job
+	var currentJob *shellJob
 	prevReader := s.stream.stdin
 	for i, pl := range cmdline.pipeline {
 		var (
@@ -188,60 +171,12 @@ func (s *Shell) execute(input string) error {
 		}
 	}
 
-	if cmdline.isBackground {
+	if cmdline.isBackground && currentJob != nil {
 		_, _ = fmt.Fprintf(s.stream.stdout, "[%d] %d\n", currentJob.id, currentJob.pid)
 	} else {
 		wg.Wait()
 	}
-	s.showJobs(s.stream, true)
-	return nil
-}
-
-func (s *Shell) handleStream(
-	prevReader io.Reader,
-	i int,
-	pipeline []commandSegment,
-) (shellStream, []io.Closer, io.Reader, error) {
-	var closers []io.Closer
-	cmdStream := shellStream{
-		stdin:  prevReader,
-		stdout: s.stream.stdout,
-		stderr: s.stream.stderr,
-	}
-
-	if i > 0 {
-		closer, ok := prevReader.(io.Closer)
-		if !ok {
-			return shellStream{}, nil, nil, fmt.Errorf("previous reader is not closable")
-		}
-		closers = append(closers, closer)
-	}
-	if i < len(pipeline)-1 {
-		pr, pw := io.Pipe()
-		cmdStream.stdout = pw
-		prevReader = pr // used for the next round of loop
-		closers = append(closers, pw)
-	}
-
-	for _, redirect := range pipeline[i].redirects {
-		//nolint:gosec // Opening files based on user input is the intended behavior of a shell
-		file, err := os.OpenFile(redirect.file, os.O_CREATE|os.O_WRONLY|redirect.appendFlag, 0o644)
-		if err != nil {
-			closeAll(closers)
-			return shellStream{}, nil, nil, fmt.Errorf("%s: %s", redirect.file, err.Error())
-		}
-		closers = append(closers, file)
-		switch redirect.fd {
-		case 1:
-			cmdStream.stdout = file
-		case 2:
-			cmdStream.stderr = file
-		default:
-			closeAll(closers)
-			return shellStream{}, nil, nil, fmt.Errorf("unsupported redirect fd: %d", redirect.fd)
-		}
-	}
-	return cmdStream, closers, prevReader, nil
+	return s.showJobs(s.stream, true)
 }
 
 func startBuiltinCommand(
@@ -274,7 +209,7 @@ func (s *Shell) startExternalCommand(
 	closers []io.Closer,
 	wg *sync.WaitGroup,
 	isBackground bool,
-) (*job, error) {
+) (*shellJob, error) {
 	//nolint:gosec // Executing dynamic user input is the intended behavior of a shell
 	cmd := exec.CommandContext(context.Background(), path, segment.args...)
 	cmd.Args[0] = segment.command
@@ -288,7 +223,7 @@ func (s *Shell) startExternalCommand(
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
 
-	var currentJob *job
+	var currentJob *shellJob
 	if isBackground {
 		s.jobs.mutex.Lock()
 		jobID := 1
@@ -306,7 +241,7 @@ func (s *Shell) startExternalCommand(
 			jobID++
 		}
 
-		currentJob = &job{
+		currentJob = &shellJob{
 			id:        jobID,
 			pid:       cmd.Process.Pid,
 			command:   segment.command + " " + strings.Join(segment.args, " "),
@@ -336,51 +271,4 @@ func closeAll(closers []io.Closer) {
 	for _, closer := range closers {
 		_ = closer.Close()
 	}
-}
-
-type commandLine struct {
-	pipeline     []commandSegment
-	isBackground bool
-}
-
-type commandSegment struct {
-	command   string
-	args      []string
-	redirects []redirect
-}
-
-func (s *Shell) parseInput(input string) (commandLine, error) {
-	cl := commandLine{}
-	input = strings.TrimSpace(input)
-	if len(input) > 0 && input[len(input)-1] == '&' {
-		cl.isBackground = true
-		input = strings.TrimSpace(input[:len(input)-1])
-	}
-	splitedInput := handleQuotesAndEscapes(input)
-	splitedInput, err := s.expandVariables(splitedInput)
-	if err != nil {
-		return commandLine{}, err
-	}
-	pipelineStr, err := splitPipeline(splitedInput)
-	if err != nil {
-		return cl, err
-	}
-
-	for _, cmdStr := range pipelineStr {
-		if len(cmdStr) == 0 {
-			return cl, fmt.Errorf("empty command")
-		}
-		command, args := cmdStr[0], cmdStr[1:]
-
-		args, redirects, err := parseRedirect(args)
-		if err != nil {
-			return cl, err
-		}
-		cl.pipeline = append(cl.pipeline, commandSegment{
-			command:   command,
-			args:      args,
-			redirects: redirects,
-		})
-	}
-	return cl, nil
 }

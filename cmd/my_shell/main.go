@@ -9,8 +9,12 @@ import (
 )
 
 func main() {
-	myShell := shell.NewShell(os.Stdin, os.Stdout)
-	err := myShell.Repl()
+	myShell, err := shell.NewShell(os.Stdin, os.Stdout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize shell: %v\n", err)
+		os.Exit(1)
+	}
+	err = myShell.Repl()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "shell error: %v\n", err)
 		os.Exit(1)
